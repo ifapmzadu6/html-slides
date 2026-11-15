@@ -409,6 +409,58 @@ def main():
     else:
         print("(TLA+ model checking skipped: set TLA_JAR to the path of tla2tools.jar to run it)")
 
+    # --- 11. add_voice Kokoro helpers ---
+    import http.server
+    import threading
+    import add_voice
+
+    ok("add_voice: local_url allows 127.0.0.1", add_voice.local_url("http://127.0.0.1:8880/") == "http://127.0.0.1:8880")
+    try:
+        add_voice.local_url("https://example.com:8880")
+        ok("add_voice: local_url rejects remote host", False, "did not raise")
+    except SystemExit:
+        ok("add_voice: local_url rejects remote host", True)
+    ok("add_voice: kokoro_lang_code maps ja/en/gb", (add_voice.kokoro_lang_code("jf_alpha"), add_voice.kokoro_lang_code("af_heart"), add_voice.kokoro_lang_code("bm_george")) == ("j", "a", "b"))
+
+    class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            if self.path == "/v1/audio/voices":
+                body = json.dumps({"voices": ["jf_alpha", "af_heart"]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def do_POST(self):
+            if self.path == "/v1/audio/speech":
+                n = int(self.headers.get("Content-Length", 0))
+                req = json.loads(self.rfile.read(n).decode("utf-8"))
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/wav")
+                self.end_headers()
+                self.wfile.write(b"RIFF" + req["voice"].encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _MockKokoroHandler)
+    t_srv = threading.Thread(target=srv.serve_forever, daemon=True)
+    t_srv.start()
+    try:
+        kurl = "http://127.0.0.1:%d" % srv.server_address[1]
+        ok("add_voice: find_kokoro_api detects local Kokoro server", add_voice.find_kokoro_api(kurl) == kurl)
+        ok("add_voice: kokoro_api_voices lists voices", add_voice.kokoro_api_voices(kurl) == [("jf_alpha", "jf_alpha"), ("af_heart", "af_heart")])
+        ok("add_voice: kokoro_api_synth posts to /v1/audio/speech", add_voice.kokoro_api_synth(kurl, "テスト", "jf_alpha", 1.0) == b"RIFFjf_alpha")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:

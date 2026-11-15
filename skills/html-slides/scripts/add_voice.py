@@ -109,7 +109,7 @@ def find_kokoro_api(url):
     for u in ([local_url(url)] if url else ["http://127.0.0.1:%d" % p for p in KOKORO_PORTS]):
         try:
             data = json.loads(http(u + "/v1/audio/voices", timeout=2))
-            if isinstance(data, dict) and "voices" in data:
+            if isinstance(data, dict) and isinstance(data.get("voices"), list):
                 return u
         except (urllib.error.URLError, OSError, ValueError):
             continue
@@ -145,7 +145,7 @@ def kokoro_py_synth(text, voice, speed, pipelines):
 
     lang = kokoro_lang_code(voice)
     if lang not in pipelines:
-        pipelines[lang] = KPipeline(lang_code=lang)
+        pipelines[lang] = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M")
     samples = []
     for _, _, audio in pipelines[lang](text, voice=voice, speed=speed):
         if audio is None:
@@ -291,13 +291,16 @@ def main():
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
             print("ERROR: could not get the voice list from Kokoro (%s)." % e)
             return 2
+        if not speakers:
+            print("ERROR: Kokoro reported no voices installed.")
+            return 2
         if a.list:
             print("Engine: %s" % kokoro_base)
             for vid, desc in speakers:
                 print("  %s" % vid)
             return 0
         label = a.speaker or (KOKORO_DEFAULT_VOICE if any(v == KOKORO_DEFAULT_VOICE for v, _ in speakers) else speakers[0][0])
-        if speakers and label not in dict(speakers):
+        if label not in dict(speakers):
             print("ERROR: there is no voice %s. Check with --list." % a.speaker)
             return 2
         key = "kokoro:%s" % label
@@ -353,7 +356,7 @@ def main():
                     raw, ext = kokoro_py_synth(t, label, a.speed, kokoro_pipelines), ".wav"
                 else:
                     raw, ext = say_synth(t, label, a.speed, tmp)
-            except (urllib.error.URLError, OSError, subprocess.CalledProcessError, ValueError) as e:
+            except (urllib.error.URLError, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
                 print("Audio could not be generated: %s (%s)" % (t[:30], e))
                 print("The HTML was not changed.")
                 return 1
