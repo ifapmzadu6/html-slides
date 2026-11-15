@@ -66,6 +66,7 @@ KOKORO_PY_VOICES = [
 ]
 QWEN3_DEFAULT_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
 QWEN3_DEFAULT_VOICE = "Ono_Anna"
+QWEN3_DEFAULT_INSTRUCT = "落ち着いた淡々としたニュース解説の口調で、感情を抑え、不必要な息継ぎや間を挟まずに明瞭に話してください。"
 QWEN3_VOICES = [
     ("Ono_Anna", "Japanese (female)"),
     ("Vivian", "Chinese (female)"),
@@ -166,6 +167,61 @@ def kokoro_lang_code(voice):
     return voice[0] if voice and voice[0] in "jabzefhip" else "j"
 
 
+def clean_speech(samples, sample_rate=24000, threshold=0.015, max_pause=0.18, keep_pause=0.10):
+    """Trim leading/trailing silence and shorten long internal breaths/pauses."""
+    win = max(1, int(sample_rate * 0.02))
+    n_frames = len(samples) // win
+    if n_frames < 3:
+        return samples
+    # Compute per-frame RMS and dilate by 1 frame so soft consonant edges are preserved.
+    rms = []
+    for i in range(n_frames):
+        chunk = samples[i * win : (i + 1) * win]
+        rms.append((sum(x * x for x in chunk) / win) ** 0.5)
+    active = [
+        any(rms[j] >= threshold for j in range(max(0, i - 1), min(n_frames, i + 2)))
+        for i in range(n_frames)
+    ]
+    if not any(active):
+        return samples
+    first = active.index(True)
+    last = n_frames - 1 - active[::-1].index(True)
+    max_q = max(1, int(max_pause / 0.02))
+    keep_q = max(1, int(keep_pause / 0.02))
+    fade = min(win // 2, int(sample_rate * 0.01))
+    out = []
+    i = first
+    while i <= last:
+        if active[i]:
+            out.extend(samples[i * win : (i + 1) * win])
+            i += 1
+        else:
+            j = i
+            while j <= last and not active[j]:
+                j += 1
+            run = j - i
+            if run > max_q:
+                head = keep_q // 2
+                tail = keep_q - head
+                part = list(samples[i * win : (i + head) * win]) + list(samples[(j - tail) * win : j * win])
+                # Smooth any splice discontinuity with a short crossfade.
+                mid = head * win
+                for k in range(min(fade, mid, len(part) - mid)):
+                    alpha = k / fade
+                    part[mid - fade + k] *= 1.0 - alpha
+                    part[mid + k] *= alpha
+                out.extend(part)
+            else:
+                out.extend(samples[i * win : j * win])
+            i = j
+    # Soft fade-in / fade-out at clip boundaries.
+    for k in range(min(fade, len(out) // 2)):
+        g = k / fade
+        out[k] *= g
+        out[-1 - k] *= g
+    return out
+
+
 def pcm_to_wav(samples, sample_rate=24000):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -204,20 +260,30 @@ def qwen3_lang_code(voice):
     return QWEN3_VOICE_LANGS.get(voice, "auto")
 
 
-def qwen3_synth(text, voice, speed, model_id, cache):
+def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=None):
     import numpy as np  # noqa: PLC0415
     from mlx_audio.tts.utils import load_model  # noqa: PLC0415
 
     if "model" not in cache:
         cache["model"] = load_model(model_id)
-    results = list(cache["model"].generate(text=text, voice=voice, lang_code=qwen3_lang_code(voice), speed=speed))
+    results = list(
+        cache["model"].generate(
+            text=text,
+            voice=voice,
+            instruct=instruct or None,
+            temperature=temperature,
+            lang_code=qwen3_lang_code(voice),
+            speed=speed,
+        )
+    )
     if not results:
         raise ValueError("Qwen3-TTS produced empty audio")
     audio = np.concatenate([np.asarray(r.audio) for r in results])
     if len(audio) == 0:
         raise ValueError("Qwen3-TTS produced empty audio")
     sr = getattr(results[0], "sample_rate", 24000) or 24000
-    return pcm_to_wav(audio.tolist(), int(sr))
+    cleaned = clean_speech(audio.tolist(), int(sr))
+    return pcm_to_wav(cleaned, int(sr))
 
 
 def say_voices():
@@ -267,6 +333,8 @@ def main():
     ap.add_argument("--url", help="address of a VOICEVOX or Kokoro-FastAPI engine (127.0.0.1 only)")
     ap.add_argument("--speaker", help="voice: a number for voicevox, a voice name for kokoro, qwen3 or say")
     ap.add_argument("--model", default=QWEN3_DEFAULT_MODEL, help="Hugging Face model ID for qwen3")
+    ap.add_argument("--instruct", default=QWEN3_DEFAULT_INSTRUCT, help="style/emotion instruction for qwen3 (empty string to disable)")
+    ap.add_argument("--temperature", type=float, help="sampling temperature for qwen3 (lower is calmer)")
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--remove", action="store_true")
@@ -377,7 +445,7 @@ def main():
                 print("  %-15s %s" % (vid, desc))
             return 0
         label = a.speaker or QWEN3_DEFAULT_VOICE
-        key = "qwen3:%s:%s" % (a.model, label)
+        key = "qwen3:%s:%s:%s:%s" % (a.model, label, a.instruct or "", "" if a.temperature is None else a.temperature)
     else:
         if shutil.which("say") is None:
             print("ERROR: the say engine exists only on macOS.")
@@ -422,7 +490,7 @@ def main():
                 elif engine == "kokoro-py":
                     raw, ext = kokoro_py_synth(t, label, a.speed, kokoro_pipelines), ".wav"
                 elif engine == "qwen3":
-                    raw, ext = qwen3_synth(t, label, a.speed, a.model, qwen3_cache), ".wav"
+                    raw, ext = qwen3_synth(t, label, a.speed, a.model, qwen3_cache, a.instruct, a.temperature), ".wav"
                 else:
                     raw, ext = say_synth(t, label, a.speed, tmp)
             except (urllib.error.URLError, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:

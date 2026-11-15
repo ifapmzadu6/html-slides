@@ -424,6 +424,11 @@ def main():
     ok("add_voice: qwen3_lang_code maps ja/en/ko/zh", (add_voice.qwen3_lang_code("Ono_Anna"), add_voice.qwen3_lang_code("Ryan"), add_voice.qwen3_lang_code("Sohee"), add_voice.qwen3_lang_code("Vivian")) == ("ja", "en", "ko", "zh"))
     wav = add_voice.pcm_to_wav([0.0, 0.5, -0.5], 24000)
     ok("add_voice: pcm_to_wav produces valid RIFF/WAVE header", wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and len(wav) == 44 + 6)
+    sr_t = 24000
+    f_t = int(sr_t * 0.02)
+    noisy = [0.0] * (20 * f_t) + [0.3] * (5 * f_t) + [0.0] * (25 * f_t) + [0.3] * (5 * f_t) + [0.0] * (20 * f_t)
+    cleaned_t = add_voice.clean_speech(noisy, sr_t)
+    ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
 
     class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):
