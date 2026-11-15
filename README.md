@@ -97,13 +97,13 @@ python3 skills/html-slides/scripts/build.py deck.slides.html --shots deck-shots
 | `skills/html-slides/assets/starter*.slides.html` | sample sources |
 | `skills/html-slides/scripts/build.py` | lint, assemble, check |
 | `skills/html-slides/scripts/check.py` | rendered check and screenshots |
-| `skills/html-slides/scripts/add_voice.py` | optional: embed locally generated audio (VOICEVOX / AivisSpeech, Japanese) |
+| `skills/html-slides/scripts/add_voice.py` | optional: embed locally generated audio (VOICEVOX / AivisSpeech or Kokoro-82M) |
 
 ## Narration and privacy
 
 Narration uses the voice installed on the viewer's device, so its quality depends on the device, and a device with no on-device voice for the deck's language plays captions only. This is deliberate. Browsers also offer online voices that sound better, but they send the text to a server, and the player never selects them.
 
-If you want a consistent voice, `add_voice.py` can generate audio on your own computer with a VOICEVOX-compatible engine and embed it in the HTML. It refuses to connect to anything other than `127.0.0.1`.
+If you want a consistent voice, `add_voice.py` can generate audio on your own computer with a VOICEVOX-compatible engine or Kokoro-82M (`--engine kokoro`) and embed it in the HTML. Network requests are restricted to `127.0.0.1`.
 
 ## Tests
 
