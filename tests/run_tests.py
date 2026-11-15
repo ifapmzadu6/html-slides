@@ -421,6 +421,9 @@ def main():
     except SystemExit:
         ok("add_voice: local_url rejects remote host", True)
     ok("add_voice: kokoro_lang_code maps ja/en/gb", (add_voice.kokoro_lang_code("jf_alpha"), add_voice.kokoro_lang_code("af_heart"), add_voice.kokoro_lang_code("bm_george")) == ("j", "a", "b"))
+    ok("add_voice: qwen3_lang_code maps ja/en/ko/zh", (add_voice.qwen3_lang_code("Ono_Anna"), add_voice.qwen3_lang_code("Ryan"), add_voice.qwen3_lang_code("Sohee"), add_voice.qwen3_lang_code("Vivian")) == ("ja", "en", "ko", "zh"))
+    wav = add_voice.pcm_to_wav([0.0, 0.5, -0.5], 24000)
+    ok("add_voice: pcm_to_wav produces valid RIFF/WAVE header", wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and len(wav) == 44 + 6)
 
     class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):

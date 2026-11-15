@@ -8,6 +8,7 @@ Usage:
   python3 add_voice.py deck.html --speaker 13    # choose a voice (a number from --list)
   python3 add_voice.py deck.html --speed 1.1     # speaking rate
   python3 add_voice.py deck.html --engine kokoro --speaker jf_alpha  # use local Kokoro-82M
+  python3 add_voice.py deck.html --engine qwen3 --speaker Ono_Anna   # use local Qwen3-TTS (Apple Silicon MLX)
   python3 add_voice.py deck.html --engine say    # use the built-in macOS voice (low quality)
   python3 add_voice.py deck.html --remove        # remove the embedded audio
 
@@ -15,6 +16,7 @@ Speech engines (all run on this computer):
   voicevox : VOICEVOX, AivisSpeech or another VOICEVOX-compatible app (Japanese voices). The app must be running.
              Connections are limited to 127.0.0.1 (this computer); any other address is refused.
   kokoro   : Kokoro-82M, via a local Kokoro-FastAPI server (127.0.0.1:8880) or the Python `kokoro` package.
+  qwen3    : Qwen3-TTS via `mlx-audio` on Apple Silicon (e.g. mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16).
   say      : the speech built into macOS. Nothing to install, but it sounds robotic.
 
 - Each sentence of the narration becomes one clip, written into deck.html as a data URI (still one file).
@@ -62,6 +64,30 @@ KOKORO_PY_VOICES = [
     ("bf_emma", "British English (female)"),
     ("bm_george", "British English (male)"),
 ]
+QWEN3_DEFAULT_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
+QWEN3_DEFAULT_VOICE = "Ono_Anna"
+QWEN3_VOICES = [
+    ("Ono_Anna", "Japanese (female)"),
+    ("Vivian", "Chinese (female)"),
+    ("Serena", "Chinese (female)"),
+    ("Uncle_Fu", "Chinese (male)"),
+    ("Dylan", "Chinese Beijing (male)"),
+    ("Eric", "Chinese Sichuan (male)"),
+    ("Ryan", "English (male)"),
+    ("Aiden", "English (male)"),
+    ("Sohee", "Korean (female)"),
+]
+QWEN3_VOICE_LANGS = {
+    "Ono_Anna": "ja",
+    "Ryan": "en",
+    "Aiden": "en",
+    "Sohee": "ko",
+    "Vivian": "zh",
+    "Serena": "zh",
+    "Uncle_Fu": "zh",
+    "Dylan": "zh",
+    "Eric": "zh",
+}
 # Always connect straight to 127.0.0.1, ignoring any proxy settings, so the narration cannot leave the machine.
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -140,6 +166,17 @@ def kokoro_lang_code(voice):
     return voice[0] if voice and voice[0] in "jabzefhip" else "j"
 
 
+def pcm_to_wav(samples, sample_rate=24000):
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        pcm = [max(-32768, min(32767, int(s * 32767.0))) for s in samples]
+        wf.writeframes(struct.pack("<%dh" % len(pcm), *pcm))
+    return buf.getvalue()
+
+
 def kokoro_py_synth(text, voice, speed, pipelines):
     from kokoro import KPipeline  # noqa: PLC0415
 
@@ -156,14 +193,31 @@ def kokoro_py_synth(text, voice, speed, pipelines):
             samples.extend(audio)
     if not samples:
         raise ValueError("Kokoro produced empty audio")
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(24000)
-        pcm = [max(-32768, min(32767, int(s * 32767.0))) for s in samples]
-        wf.writeframes(struct.pack("<%dh" % len(pcm), *pcm))
-    return buf.getvalue()
+    return pcm_to_wav(samples, 24000)
+
+
+def qwen3_available():
+    return importlib.util.find_spec("mlx_audio") is not None
+
+
+def qwen3_lang_code(voice):
+    return QWEN3_VOICE_LANGS.get(voice, "auto")
+
+
+def qwen3_synth(text, voice, speed, model_id, cache):
+    import numpy as np  # noqa: PLC0415
+    from mlx_audio.tts.utils import load_model  # noqa: PLC0415
+
+    if "model" not in cache:
+        cache["model"] = load_model(model_id)
+    results = list(cache["model"].generate(text=text, voice=voice, lang_code=qwen3_lang_code(voice), speed=speed))
+    if not results:
+        raise ValueError("Qwen3-TTS produced empty audio")
+    audio = np.concatenate([np.asarray(r.audio) for r in results])
+    if len(audio) == 0:
+        raise ValueError("Qwen3-TTS produced empty audio")
+    sr = getattr(results[0], "sample_rate", 24000) or 24000
+    return pcm_to_wav(audio.tolist(), int(sr))
 
 
 def say_voices():
@@ -209,9 +263,10 @@ def main():
     setup_console()
     ap = argparse.ArgumentParser()
     ap.add_argument("deck")
-    ap.add_argument("--engine", choices=["auto", "voicevox", "kokoro", "say"], default="auto")
+    ap.add_argument("--engine", choices=["auto", "voicevox", "kokoro", "qwen3", "say"], default="auto")
     ap.add_argument("--url", help="address of a VOICEVOX or Kokoro-FastAPI engine (127.0.0.1 only)")
-    ap.add_argument("--speaker", help="voice: a number for voicevox, a voice name for kokoro or say")
+    ap.add_argument("--speaker", help="voice: a number for voicevox, a voice name for kokoro, qwen3 or say")
+    ap.add_argument("--model", default=QWEN3_DEFAULT_MODEL, help="Hugging Face model ID for qwen3")
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--remove", action="store_true")
@@ -242,12 +297,15 @@ def main():
     base = find_voicevox(a.url) if a.engine in ("auto", "voicevox") else None
     kokoro_base = find_kokoro_api(a.url) if (not base and a.engine in ("auto", "kokoro")) else None
     kokoro_py = (not base and not kokoro_base and not a.url and a.engine in ("auto", "kokoro") and kokoro_py_available())
+    qwen3_ok = (not base and not kokoro_base and not kokoro_py and not a.url and a.engine in ("auto", "qwen3") and qwen3_available())
     if base:
         engine = "voicevox"
     elif kokoro_base:
         engine = "kokoro-api"
     elif kokoro_py:
         engine = "kokoro-py"
+    elif qwen3_ok:
+        engine = "qwen3"
     elif a.engine == "say":
         engine = "say"
     else:
@@ -255,7 +313,7 @@ def main():
     if not engine:
         print("No local speech engine was found.")
         print("  Start VOICEVOX / AivisSpeech (127.0.0.1:50021/10101), Kokoro-FastAPI (127.0.0.1:8880),")
-        print('  or install the Python package (`pip install kokoro "misaki[ja]"`).')
+        print('  or install Python `kokoro` ("misaki[ja]") or `mlx-audio` (for Qwen3-TTS on Apple Silicon).')
         if platform.system() == "Darwin":
             print("  For a quick trial, --engine say uses the built-in macOS voice (it sounds robotic).")
         print("The HTML was not changed. Without embedded audio the deck still plays with the device voice.")
@@ -312,6 +370,14 @@ def main():
             return 0
         label = a.speaker or KOKORO_DEFAULT_VOICE
         key = "kokoro:%s" % label
+    elif engine == "qwen3":
+        if a.list:
+            print("Engine: qwen3 (%s)" % a.model)
+            for vid, desc in QWEN3_VOICES:
+                print("  %-15s %s" % (vid, desc))
+            return 0
+        label = a.speaker or QWEN3_DEFAULT_VOICE
+        key = "qwen3:%s:%s" % (a.model, label)
     else:
         if shutil.which("say") is None:
             print("ERROR: the say engine exists only on macOS.")
@@ -344,6 +410,7 @@ def main():
     todo = [t for t in texts if t not in clips]
     print("%d sentences, %d to generate, voice: %s (generated on this computer)" % (len(texts), len(todo), label))
     kokoro_pipelines = {}
+    qwen3_cache = {}
     with tempfile.TemporaryDirectory() as tmp:
         tmp = pathlib.Path(tmp)
         for n, t in enumerate(todo, 1):
@@ -354,6 +421,8 @@ def main():
                     raw, ext = kokoro_api_synth(kokoro_base, t, label, a.speed), ".wav"
                 elif engine == "kokoro-py":
                     raw, ext = kokoro_py_synth(t, label, a.speed, kokoro_pipelines), ".wav"
+                elif engine == "qwen3":
+                    raw, ext = qwen3_synth(t, label, a.speed, a.model, qwen3_cache), ".wav"
                 else:
                     raw, ext = say_synth(t, label, a.speed, tmp)
             except (urllib.error.URLError, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
