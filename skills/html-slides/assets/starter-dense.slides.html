@@ -1,0 +1,123 @@
+<!--
+title: 勤怠システム刷新 検討結果のご報告
+theme: corporate
+density: dense
+footer: 社外秘 ｜ 情報システム部 ｜ 2026年11月
+-->
+
+<section class="slide title">
+  <p class="kicker" data-say="経営会議むけの資料です。">経営会議 資料</p>
+  <h1 data-say="勤怠システムの刷新について、検討結果をご報告します。">勤怠システム刷新<br>検討結果のご報告</h1>
+  <p class="sub" data-say="結論、比較、費用、スケジュールの順にご説明します。">情報システム部 ｜ 2026年11月</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="はじめに、結論です。">結論と背景</h2>
+  <p class="lead" data-say="クラウド型のB案への移行を提案します。" data-caption="クラウド型のB案への移行を提案します。">結論：クラウド型（B案）へ移行し、2027年4月に全社で利用を開始する</p>
+  <div class="cols arrows grow">
+    <div class="box" data-say="現行システムは、導入から12年がたち、保守の期限が来年の9月に切れます。">
+      <h3>現状</h3>
+      <ul>
+        <li>導入から12年が経過</li>
+        <li>保守期限は2027年9月</li>
+        <li>スマホからの打刻に非対応</li>
+        <li>月次の集計に <strong>毎月40時間</strong></li>
+      </ul>
+    </div>
+    <div class="box" data-say="このままでは、法改正への対応が難しく、集計の手作業も減りません。">
+      <h3>課題</h3>
+      <ul>
+        <li>法改正のたびに改修費が発生
+          <ul><li>直近3年で計1,800万円</li></ul>
+        </li>
+        <li>在宅勤務の打刻を自己申告で運用</li>
+        <li>集計ミスによる給与の再計算
+          <ul><li>年に6件前後</li></ul>
+        </li>
+      </ul>
+    </div>
+    <div class="box" data-say="そこで、クラウド型に切り替えて、打刻と集計を自動化します。">
+      <h3>対応策</h3>
+      <ul>
+        <li>クラウド型へ切り替え</li>
+        <li>スマホ・PCから打刻</li>
+        <li>集計と給与連携を自動化</li>
+        <li>法改正は <strong>追加費用なし</strong> で対応</li>
+      </ul>
+    </div>
+  </div>
+  <p class="source">出典：情報システム部 調べ（2026年10月時点）</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="次に、三つの案の比較です。">3案の比較</h2>
+  <p class="lead" data-say="総合評価では、B案がもっとも優れています。">機能・費用・導入期間のバランスで、B案がもっとも優れる</p>
+  <table class="matrix">
+    <thead>
+      <tr><th>評価項目</th><th>A案：現行を改修</th><th>B案：クラウド型</th><th>C案：自社開発</th></tr>
+    </thead>
+    <tbody>
+      <tr data-say="スマホからの打刻は、B案とC案で対応できます。"><th>スマホ打刻</th><td class="ng">×</td><td class="ok">○</td><td class="ok">○</td></tr>
+      <tr data-say="法改正への対応は、B案だけが追加費用なしです。"><th>法改正への対応</th><td class="warn">△<br><small>都度改修</small></td><td class="ok">○<br><small>追加費用なし</small></td><td class="warn">△<br><small>自社で改修</small></td></tr>
+      <tr data-say="給与システムとの連携も、B案は標準で備えています。"><th>給与システム連携</th><td class="warn">△</td><td class="ok">○</td><td class="ok">○</td></tr>
+      <tr data-say="導入期間は、B案が5か月でもっとも短くなります。"><th>導入期間</th><td>8か月</td><td><strong>5か月</strong></td><td>14か月</td></tr>
+      <tr data-say="5年間の総費用も、B案がもっとも低くなります。"><th>5年間の総費用</th><td>6,200万円</td><td><strong>4,800万円</strong></td><td>9,500万円</td></tr>
+      <tr class="total" data-say="以上から、B案を推奨します。"><th>総合評価</th><td class="warn">△</td><td class="ok">◎ 推奨</td><td class="ng">×</td></tr>
+    </tbody>
+  </table>
+  <p class="source">※ 総費用は初期費用と5年分の利用料・保守料の合計（税抜）</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="費用の内訳です。">B案の費用と効果</h2>
+  <div class="cols grow" style="grid-template-columns: 3fr 2fr; grid-auto-flow: row">
+    <table data-say="初期費用は900万円、年間の利用料は780万円で、5年間の合計は4,800万円です。" data-caption="初期費用は900万円、年間の利用料は780万円で、5年間の合計は4,800万円です。">
+      <thead><tr><th>費目</th><th class="num">初年度</th><th class="num">2年目以降（年）</th><th class="num">5年合計</th></tr></thead>
+      <tbody>
+        <tr><th>初期設定・データ移行</th><td class="num">900万円</td><td class="num">—</td><td class="num">900万円</td></tr>
+        <tr><th>利用料（1,200名）</th><td class="num">720万円</td><td class="num">720万円</td><td class="num">3,600万円</td></tr>
+        <tr><th>サポート費</th><td class="num">60万円</td><td class="num">60万円</td><td class="num">300万円</td></tr>
+        <tr class="total"><th>合計</th><td class="num">1,680万円</td><td class="num">780万円</td><td class="num">4,800万円</td></tr>
+      </tbody>
+    </table>
+    <div class="rows">
+      <div class="card" data-say="効果として、集計作業が年間で400時間ほど減ります。">
+        <h3>集計作業の削減</h3>
+        <p class="stat">400<small>時間／年</small></p>
+        <p>月40時間 → 月7時間</p>
+      </div>
+      <div class="card" data-say="現行の保守と改修にかかる費用とくらべて、5年で1,400万円の削減になります。">
+        <h3>現行比のコスト削減</h3>
+        <p class="stat">1,400<small>万円／5年</small></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2 data-say="導入のスケジュールです。">導入スケジュール</h2>
+  <p class="lead" data-say="12月に契約し、来年の4月に全社で利用を始めます。">2026年12月に契約、2027年4月に全社利用開始</p>
+  <table class="gantt">
+    <thead><tr><th>作業</th><th>12月</th><th>1月</th><th>2月</th><th>3月</th><th>4月</th><th>5月</th></tr></thead>
+    <tbody>
+      <tr data-say="まず12月に、契約と要件の確認をおこないます。"><th>契約・要件確認</th><td class="bar">契約</td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr data-say="1月から2月にかけて、設定とデータの移行を進めます。"><th>設定・データ移行</th><td></td><td class="bar" colspan="2">設定・移行</td><td></td><td></td><td></td></tr>
+      <tr data-say="2月の後半から、人事部と情報システム部で試験運用をおこないます。"><th>試験運用（2部門）</th><td></td><td></td><td class="bar alt" colspan="2">試験運用</td><td></td><td></td></tr>
+      <tr data-say="3月には、全社員むけの説明会を開きます。"><th>社員向け説明会</th><td></td><td></td><td></td><td class="bar">説明会</td><td></td><td></td></tr>
+      <tr data-say="そして4月から、全社で利用を始めます。"><th>全社利用開始</th><td></td><td></td><td></td><td></td><td class="bar" colspan="2">本番運用</td></tr>
+    </tbody>
+  </table>
+  <div class="cols">
+    <div class="card" data-say="リスクは、年度末の繁忙期と重なることです。"><h3><span class="tag warn">リスク</span> 年度末の繁忙期と重なる</h3><p>説明会は録画配信を併用し、参加の負担を下げる</p></div>
+    <div class="card" data-say="判断の期限は、11月末です。"><h3><span class="tag ng">期限</span> 11月末までに決裁が必要</h3><p>12月契約に間に合わない場合、利用開始は7月にずれ込む</p></div>
+  </div>
+</section>
+
+<section class="slide end">
+  <h1 data-say="ご説明は以上です。">ご判断いただきたいこと</h1>
+  <ol>
+    <li data-say="一つ目は、B案への移行のご承認。">クラウド型（B案）への移行の承認</li>
+    <li data-say="二つ目は、初年度1,680万円の予算のご承認です。" data-caption="二つ目は、初年度1,680万円の予算のご承認です。">初年度予算 1,680万円の承認</li>
+  </ol>
+  <p class="sub" data-say="ご審議のほど、よろしくお願いいたします。">ご審議のほど、よろしくお願いいたします</p>
+</section>

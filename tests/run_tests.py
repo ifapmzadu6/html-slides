@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""Regression tests for the html-slides skill. Run them after changing the player or the scripts.
+
+  python3 tests/run_tests.py
+
+What is covered:
+  1. Source lint      : a deliberately broken source produces the expected kinds of error.
+  2. Documentation    : every example in SKILL.md and references/*.md passes the lint.
+  3. Sample decks     : the standard and dense samples build cleanly in every theme.
+  4. Round trip       : extracting the source from a built deck and rebuilding gives the same deck.
+  5. Rendered check   : overflow that is easy to miss is reported.
+  6. PDF              : printing gives one page per slide.
+  7. Interaction      : the sample deck is opened in a headless browser and driven with key presses and clicks
+                        (play, pause, resume, navigation, auto-advance, overview, captions, speed, play to the
+                        end, replay). No sound is available, so this runs in the silent, captions-only mode.
+  8. Narration        : a fake speechSynthesis is injected. The voice list arrives late, one utterance never
+                        reports its end and one fails; playback must still reach the end, and an online voice
+                        must never be used.
+  9. Dead engine      : an engine that never starts speaking and only reports "end" for utterances we cancel
+                        (the defect found by model checking).
+ 10. TLA+             : model checking of tests/tla/Player.tla, only when tla2tools.jar is available
+                        (set TLA_JAR to its path).
+
+The sample decks and several fixtures are Japanese because the skill is used mostly for Japanese decks.
+"""
+import html
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SKILL = ROOT / "skills" / "html-slides"
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(SKILL / "scripts"))
+import build  # noqa: E402
+import check  # noqa: E402
+
+results = []
+
+
+def ok(name, cond, info=""):
+    results.append((name, bool(cond), info))
+
+
+def errors(issues):
+    return [i for i in issues if i.get("level", "error") == "error"]
+
+
+SELFTEST_JS = r"""
+<script>
+(async function () {
+  const R = [];
+  const ok = (n, c, info) => R.push({ name: n, pass: !!c, info: info == null ? '' : String(info) });
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const $ = s => document.querySelector(s);
+  const all = () => [...document.querySelectorAll('#stage > section.slide')];
+  const cur = () => all().findIndex(s => s.classList.contains('active')) + 1;
+  const playing = () => $('#player').classList.contains('playing');
+  const pend = () => document.querySelectorAll('#stage .slide.active .pending').length;
+  const cap = () => $('#caption-text').textContent;
+  const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  const N = all().length;
+  try {
+    ok('start: slide 1, start screen shown, not playing', cur() === 1 && !$('#start').hidden && !playing());
+    ok('start: every element is revealed', pend() === 0);
+    ok('start: only the current slide is visible', all().filter(s => getComputedStyle(s).visibility === 'visible').length === 1);
+    ok('start: controls are labelled in the deck language', $('#b-grid').getAttribute('aria-label') === 'スライド一覧' && $('#start-silent').textContent.length > 0, $('#b-grid').getAttribute('aria-label'));
+
+    key('ArrowRight'); ok('right arrow while stopped: slide 2, start screen gone, all revealed', cur() === 2 && $('#start').hidden && pend() === 0);
+    key('ArrowLeft'); ok('left arrow while stopped: back to slide 1', cur() === 1);
+    key('End'); ok('End: last slide', cur() === N);
+    key('ArrowRight'); ok('right arrow on the last slide: stays', cur() === N);
+    key('Home'); ok('Home: first slide', cur() === 1);
+    key('ArrowLeft'); ok('left arrow on the first slide: stays', cur() === 1);
+    ok('slide counter', $('#count').textContent.replace(/\s/g, '') === '1/' + N, $('#count').textContent);
+
+    $('#b-play').click(); await sleep(100);
+    ok('play: playing, narrated elements hidden', playing() && pend() > 0, 'pending=' + pend());
+    await sleep(1500);
+    ok('playing: a caption is shown', cap().length > 0 && $('#caption').classList.contains('show'), cap());
+    ok('playing: the element being narrated is visible', document.querySelectorAll('#stage .slide.active .speaking:not(.pending)').length >= 1);
+
+    const capBefore = cap(), pendBefore = pend();
+    key(' '); ok('Space: pauses', !playing());
+    await sleep(4000);
+    ok('paused: nothing advances', cur() === 1 && pend() === pendBefore && cap() === capBefore);
+    key(' '); await sleep(400);
+    ok('resume: continues from the same sentence', playing() && cap() === capBefore && pend() === pendBefore, cap());
+
+    key('ArrowRight'); await sleep(100);
+    ok('right arrow while playing: slide 2, still playing, elements hidden again', cur() === 2 && playing() && pend() > 0);
+    await sleep(1200);
+    ok('after navigating: the caption belongs to slide 2', cap().length > 0 && cap() !== capBefore, cap());
+    await sleep(45000);
+    ok('auto-advance: moved on to a later slide', cur() > 2 && playing(), 'slide ' + cur());
+    ok('auto-advance: no "speaking" highlight left on earlier slides', document.querySelectorAll('#stage .slide:not(.active) .speaking').length === 0);
+
+    key('g');
+    ok('G: overview opens and playback pauses', !$('#overview').hidden && !playing());
+    ok('overview: one thumbnail per slide', document.querySelectorAll('.ov-item').length === N);
+    ok('overview: exactly one thumbnail marked current', document.querySelectorAll('.ov-item.current').length === 1);
+    const c0 = cur(); key('ArrowRight'); key(' ');
+    ok('overview open: other keys do nothing', cur() === c0 && !playing());
+    key('Escape'); await sleep(300);
+    ok('Esc: overview closes and playback resumes', $('#overview').hidden && playing());
+    key('g'); document.querySelectorAll('.ov-item')[1].click(); await sleep(300);
+    ok('thumbnail click: jumps to slide 2 and resumes', cur() === 2 && playing() && $('#overview').hidden);
+    ok('overview closed: thumbnails removed', document.querySelectorAll('.ov-item').length === 0);
+
+    key('c'); ok('C: captions off', !$('#caption').classList.contains('show'));
+    key('c'); await sleep(50); ok('C: captions on', $('#caption').classList.contains('show') || cap() === '');
+    const r0 = $('#b-rate').textContent; key('>');
+    ok('>: speed changes', $('#b-rate').textContent !== r0, $('#b-rate').textContent);
+    await sleep(600); ok('after a speed change: still playing', playing() && cap().length > 0);
+    key('<'); ok('<: speed restored', $('#b-rate').textContent === r0);
+
+    key(' ');
+    key('g'); key('Escape'); await sleep(200);
+    ok('overview opened and closed while stopped: stays stopped', !playing());
+    key(' '); await sleep(100);
+
+    key('End'); await sleep(70000);
+    ok('played to the end: stops and shows the start screen', !playing() && !$('#start').hidden && cur() === N, 'slide ' + cur());
+    ok('at the end: all revealed, no caption', pend() === 0 && cap() === '');
+    $('#start-play').click(); await sleep(400);
+    ok('replay: starts from slide 1', cur() === 1 && playing() && $('#start').hidden);
+
+    key(' '); key('ArrowRight');
+    ok('navigating while stopped: all revealed', pend() === 0 && cur() === 2 && !playing());
+    key(' '); await sleep(100);
+    ok('play after navigating while stopped: starts that slide from the top', playing() && pend() > 0);
+    await sleep(800);
+    const before = cur();
+    key(' '); key(' '); key(' '); await sleep(30000);
+    ok('three rapid Space presses: stopped, and stays put', !playing() && cur() === before, 'slide ' + cur());
+    key('ArrowRight'); key('ArrowRight'); key('ArrowLeft'); await sleep(2000);
+    ok('several moves while stopped: does not start playing by itself', !playing() && pend() === 0);
+  } catch (e) { ok('exception during the test', false, e && e.stack || e); }
+  const pre = document.createElement('pre'); pre.id = 'selftest'; pre.textContent = JSON.stringify(R); document.body.appendChild(pre);
+})();
+</script>
+"""
+
+# A fake speechSynthesis. The voice list arrives late and mixes online voices with an on-device one.
+# The 3rd utterance never reports its end; the 5th fails.
+# With window.__ttsDead set, the engine never starts speaking, and cancel() makes it report "end" for that utterance.
+TTS_MOCK_JS = r"""
+<script>
+(function () {
+  var log = window.__tts = { spoken: [], voices: [], cancels: 0 };
+  var voices = [], listeners = [], current = null, n = 0, deadU = null;
+  var all = [
+    { name: 'Microsoft Nanami Online (Natural) - Japanese (Japan)', lang: 'ja-JP', localService: false, default: true },
+    { name: 'Google Japanese', lang: 'ja-JP', localService: false, default: false },
+    { name: 'Microsoft Haruka - Japanese (Japan)', lang: 'ja-JP', localService: true, default: false },
+    { name: 'Samantha', lang: 'en-US', localService: true, default: false }
+  ];
+  var mock = {
+    getVoices: function () { return voices.slice(); },
+    addEventListener: function (t, f) { listeners.push(f); },
+    cancel: function () {
+      log.cancels++; if (current) { clearTimeout(current); current = null; }
+      if (deadU) { var d = deadU; deadU = null; setTimeout(function () { if (d.onend) d.onend(); }, 10); }
+    },
+    pause: function () {}, resume: function () {},
+    speak: function (u) {
+      if (!u.text.trim()) return;
+      var k = ++n; log.spoken.push(u.text); log.voices.push(u.voice ? u.voice.name : '(default voice)');
+      if (window.__ttsDead) { deadU = u; return; }
+      current = setTimeout(function () {
+        if (u.onstart) u.onstart();
+        current = setTimeout(function () {
+          current = null;
+          if (k === 3) return;
+          if (k === 5) { if (u.onerror) u.onerror({ error: 'synthesis-failed' }); return; }
+          if (u.onend) u.onend();
+        }, 700);
+      }, 60);
+    }
+  };
+  Object.defineProperty(window, 'speechSynthesis', { value: mock, configurable: true });
+  window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+  setTimeout(function () { voices = all; listeners.forEach(function (f) { f(); }); }, 900);
+})();
+</script>
+"""
+TTS_TEST_JS = r"""
+<script>
+(async function () {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const $ = s => document.querySelector(s);
+  const all = () => [...document.querySelectorAll('#stage > section.slide')];
+  const cur = () => all().findIndex(s => s.classList.contains('active')) + 1;
+  const out = {};
+  try {
+    let toastSeen = '';
+    new MutationObserver(() => { if ($('#toast').textContent) toastSeen = $('#toast').textContent; }).observe($('#toast'), { childList: true, characterData: true, subtree: true });
+    $('#start-play').click();                       // start playing before the voice list arrives
+    await sleep(3000);
+    out.toastEarly = $('#toast').textContent;
+    out.mutedIconEarly = $('#b-mute').classList.contains('off');
+    await sleep(240000);
+    out.ended = !$('#player').classList.contains('playing') && !$('#start').hidden && cur() === all().length;
+    out.slide = cur();
+    out.toastEnd = $('#toast').textContent; out.toastSeen = toastSeen;
+    out.voiceMenu = [...$('#voice').options].map(o => o.value);
+    out.log = window.__tts;
+  } catch (e) { out.error = String(e && e.stack || e); }
+  const pre = document.createElement('pre'); pre.id = 'ttstest'; pre.textContent = JSON.stringify(out); document.body.appendChild(pre);
+})();
+</script>
+"""
+
+BROKEN = """<!--
+title: broken source
+theme: drak
+-->
+<section class="slide bullets">
+  <h2 data-speak="A heading.">Heading</h2>
+  <ul>
+    <li data-say="First." data-anim="slide">Item</li>
+    <li class="highlight">Item</li>
+  </ul>
+</section>
+<section class="slide">
+  <h2>No narration</h2>
+  <p class="center" style="font-size:16px">small</p>
+  <div class="cols"><div class="card"><p>never closed</div>
+</section>
+<section class="slide">
+  <h2 data-say="One. Two." data-caption="1 and 2.">x</h2>
+  <img src="https://example.com/a.png" alt="x">
+  <script>alert(1)</script>
+</section>
+"""
+EXPECT = ["unknown-theme", "unknown-class", "unknown-attr", "unknown-anim", "no-narration", "small-text", "unclosed", "caption-mismatch", "external", "script"]
+HEAD = "<!--\ntitle: t\ntheme: light\n-->\n"
+COVER = '<section class="slide title"><h1 data-say="Hello.">x</h1></section>\n'
+
+
+def js_errors(stderr):
+    return [l for l in stderr.splitlines() if re.search(r"Uncaught|TypeError|ReferenceError|SyntaxError", l)]
+
+
+def built(tmp, name, source):
+    meta, css, slides, issues, lines = build.lint(source)
+    deck = tmp / name
+    build.assemble(meta, css, slides, deck)
+    return deck
+
+
+def main():
+    check.setup_console()
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="html-slides-test-"))
+    starter = SKILL / "assets" / "starter.slides.html"
+    browser = check.find_browser()
+    if not browser:
+        print("Chrome / Edge was not found, so the tests cannot run.")
+        return 2
+
+    # --- 1. source lint ---
+    types = {i["type"] for i in errors(build.lint(BROKEN)[3])}
+    for t in EXPECT:
+        ok("lint: reports %s" % t, t in types)
+    meta, css, slides, issues, lines = build.lint(starter.read_text(encoding="utf-8"))
+    ok("lint: the sample source has no errors", not errors(issues), issues)
+    ok("lint: a source without settings is an error", any(i["type"] == "no-header" for i in build.lint('<section class="slide"><h2 data-say="Hi.">x</h2></section>')[3]))
+    good = HEAD + '<style>.mine { color: red; }</style>\n<section class="slide title">\n<h1 data-say>Title</h1>\n<p class="mine">x<br>y</p>\n<ul><li>a<li>b</ul>\n<svg viewBox="0 0 10 10"><rect width="5" height="5"/><text font-size="3">a</text></svg>\n<a href="https://example.com">link</a>\n</section>'
+    ok("lint: accepts custom classes, optional end tags, SVG and links", not errors(build.lint(good)[3]), build.lint(good)[3])
+    bom = tmp / "bom.slides.html"
+    bom.write_bytes(b"\xef\xbb\xbf" + starter.read_bytes())
+    ok("lint: reads a source that starts with a BOM", not errors(build.lint(build.read_source(bom))[3]))
+    mixed = "本当ですか！？はい。「そうです。」 It works. Yes!"
+    ok("sentence splitting matches the player", build.sentences(mixed) == ["本当ですか！？", "はい。", "「そうです。」", "It works.", "Yes!"], build.sentences(mixed))
+
+    # --- 2. documentation examples ---
+    bad = []
+    for md in (SKILL / "references" / "layouts.md", SKILL / "references" / "dense.md", SKILL / "SKILL.md"):
+        for k, b in enumerate(re.findall(r"```html\n(.*?)```", md.read_text(encoding="utf-8"), re.S)):
+            b = b.replace("…", "")
+            if "<section" in b and re.search(r"<section[^>]*>\s*</section>", b):
+                continue  # an outline, not a real slide
+            if b.lstrip().startswith("<!--") and "<section" not in b:
+                continue  # settings only
+            if not b.lstrip().startswith("<!--"):
+                b = HEAD + (b if "<section" in b else '<section class="slide title">\n<h1 data-say="Hello.">x</h1>\n' + b + "</section>")
+            bad += ["%s #%d %s" % (md.name, k, i["type"]) for i in errors(build.lint(b)[3])]
+    ok("docs: every example passes the lint", not bad, bad)
+
+    # --- 3. sample decks ---
+    deck = tmp / "starter.html"
+    build.assemble(meta, css, slides, deck)
+    rep = check.inspect(deck)
+    ok("sample: no errors or warnings in the rendered check", not rep["issues"], rep["issues"])
+    for theme in build.THEMES:
+        d = tmp / ("theme-%s.html" % theme)
+        build.assemble(dict(meta, theme=theme), css, slides, d)
+        r = check.inspect(d)
+        ok("theme %s: sample deck is clean" % theme, not r["issues"], r["issues"])
+
+    dsrc = (SKILL / "assets" / "starter-dense.slides.html").read_text(encoding="utf-8")
+    dmeta, dcss, dslides, dissues, dlines = build.lint(dsrc)
+    ok("dense sample: lint is clean", not dissues, dissues)
+    ddeck = tmp / "dense.html"
+    build.assemble(dmeta, dcss, dslides, ddeck)
+    drep = check.inspect(ddeck)
+    ok("dense sample: rendered check is clean", not drep["issues"], drep["issues"])
+    ok("dense sample: every slide except the cover and closing slide is dense", [x.get("dense") for x in drep["stats"]] == [False, True, True, True, True, False], [x.get("dense") for x in drep["stats"]])
+    dt = ddeck.read_text(encoding="utf-8")
+    ok("dense sample: settings reach the built HTML", 'data-density="dense"' in dt and "data-footer=" in dt)
+    for theme in build.THEMES:
+        d = tmp / ("dense-%s.html" % theme)
+        build.assemble(dict(dmeta, theme=theme), dcss, dslides, d)
+        r = check.inspect(d)
+        ok("theme %s: dense sample is clean" % theme, not r["issues"], r["issues"])
+    small = dsrc.replace('<p class="source">', '<p class="source" style="font-size:12px">', 1)
+    ok("dense: text under 14px is an error", any(i["type"] == "small-text" for i in check.inspect(built(tmp, "dense-small.html", small))["issues"]) or any(i["type"] == "small-text" for i in build.lint(small)[3]))
+
+    pair = ('<!--\ntitle: t\ntheme: light\ndensity: dense\n-->\n<section class="slide title"><h1 data-say="エーピーアイです。せんにひゃく円です。" data-caption="APIです。1,200円です。">x</h1></section>\n'
+            '<section class="slide"><h2 data-say>Table</h2><table><tbody><tr><th>a</th><td><span class="tag ok">done</span></td><td class="ok">○<small>note</small></td></tr></tbody></table></section>')
+    ok("captions: several sentences are accepted when data-say and data-caption match in number", not errors(build.lint(pair)[3]), build.lint(pair)[3])
+    pr = check.inspect(built(tmp, "pair.html", pair))
+    ok("captions: sentences are paired one by one", pr["texts"][:2] == ["エーピーアイです。", "せんにひゃく円です。"], pr["texts"][:3])
+    ok("dense: labels and remarks inside a table are not too small", not [i for i in pr["issues"] if i["type"] == "small-text"], pr["issues"])
+
+    # --- 4. round trip ---
+    src2 = tmp / "round.slides.html"
+    build.extract(deck, src2)
+    m2 = build.lint(src2.read_text(encoding="utf-8"))
+    ok("round trip: the extracted source gives the same slides and settings", m2[2] == slides and m2[0] == meta)
+    dsrc2 = tmp / "dense-round.slides.html"
+    build.extract(ddeck, dsrc2)
+    dm2 = build.lint(dsrc2.read_text(encoding="utf-8"))
+    ok("round trip: the dense sample keeps its settings and slides", dm2[0] == dmeta and dm2[2] == dslides, (dm2[0], dmeta))
+
+    # --- 5. overflow that is easy to miss ---
+    cases = (("a long URL that cannot wrap", '<section class="slide"><h2 data-say="Next.">https://example.com/very/long/path/that/cannot/wrap/anywhere/at/all/because/it/has/no/spaces/in/it/whatsoever</h2></section>'),
+             ("text spilling out of a box that is too short", '<section class="slide"><h2 data-say="Next.">Heading</h2><div class="cols" style="height:120px"><div class="card"><p>とても長い文章がカードの中に入っていて、高さが足りないので下にあふれてしまう例です。さらに続けて書きます。まだ続きます。</p></div><div class="card"><p>short</p></div></div><p>next element</p></section>'))
+    for name, body in cases:
+        ok("rendered check: reports %s" % name, any(i["type"] == "overflow" for i in check.inspect(built(tmp, "over.html", HEAD + COVER + body))["issues"]))
+
+    # --- 6. PDF ---
+    pdf = tmp / "out.pdf"
+    check.run(browser, ["--no-pdf-header-footer", "--print-to-pdf=" + str(pdf), deck.as_uri()])
+    pages = len(re.findall(rb"/Type\s*/Page[^s]", pdf.read_bytes())) if pdf.exists() else 0
+    ok("PDF: one page per slide", pages == rep["slides"], "pages=%d slides=%d" % (pages, rep["slides"]))
+
+    # --- 7. interaction ---
+    st = tmp / "selftest.html"
+    st.write_text(deck.read_text(encoding="utf-8").replace("</body>", SELFTEST_JS + "</body>"), encoding="utf-8")
+    r = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=400000", "--dump-dom", st.as_uri() + "?mute=1"], timeout=240)
+    m = re.search(r'<pre id="selftest">(.*?)</pre>', r.stdout, re.S)
+    ok("interaction: the test ran to the end", bool(m))
+    if m:
+        for x in json.loads(html.unescape(m.group(1))):
+            ok("interaction: " + x["name"], x["pass"], x["info"])
+    ok("interaction: no JavaScript errors", not js_errors(r.stderr), js_errors(r.stderr)[:3])
+
+    en = HEAD.replace("-->", "lang: en\n-->") + '<section class="slide title"><h1 data-say="This is a short English deck.">English</h1></section>\n<section class="slide"><h2 data-say="It has two slides.">Two</h2></section>'
+    r = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", built(tmp, "en.html", en).as_uri()])
+    ok("UI text: an English deck gets English labels", 'aria-label="All slides"' in r.stdout and "Play without sound" in r.stdout and "2 slides" in r.stdout)
+
+    # --- 8. narration with a fake speech engine ---
+    mocked = deck.read_text(encoding="utf-8").replace('<div id="player">', TTS_MOCK_JS + '<div id="player">', 1).replace("</body>", TTS_TEST_JS + "</body>")
+    tt = tmp / "ttstest.html"
+    tt.write_text(mocked, encoding="utf-8")
+    r = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=600000", "--dump-dom", tt.as_uri()], timeout=240)
+    m = re.search(r'<pre id="ttstest">(.*?)</pre>', r.stdout, re.S)
+    ok("narration: the test ran to the end", bool(m))
+    if m:
+        o = json.loads(html.unescape(m.group(1)))
+        log = o.get("log") or {"spoken": [], "voices": []}
+        total = len(rep["texts"])
+        ok("narration: no exception", "error" not in o, o.get("error"))
+        ok("narration: playing before the voice list arrives is not treated as 'no voice'", not o.get("toastEarly") and not o.get("mutedIconEarly"), o.get("toastEarly"))
+        ok("narration: only the on-device voice was used (never an online or default voice)", log["voices"] and all(v == "Microsoft Haruka - Japanese (Japan)" for v in log["voices"]), sorted(set(log["voices"])))
+        ok("narration: online voices are not offered in the voice menu", all("Online" not in v and "Google" not in v for v in o.get("voiceMenu", [])), o.get("voiceMenu"))
+        ok("narration: reaches the end even when an utterance never reports its end", o.get("ended"), "slide %s" % o.get("slide"))
+        ok("narration: later sentences are still spoken after one failure", len(log["spoken"]) >= total - 3, "spoke %d of %d sentences" % (len(log["spoken"]), total))
+        ok("narration: one failure does not switch to captions only", not o.get("toastEnd"), o.get("toastEnd"))
+        ok("narration: no sentence is spoken twice", len(log["spoken"]) == len(set(log["spoken"])), [x for x in log["spoken"] if log["spoken"].count(x) > 1][:3])
+    ok("narration: no JavaScript errors", not js_errors(r.stderr), js_errors(r.stderr)[:3])
+
+    # --- 9. an engine that never starts speaking (reproduces the defect found by model checking) ---
+    td = tmp / "ttsdead.html"
+    td.write_text(mocked.replace('<div id="player">', '<div id="player">', 1).replace(TTS_MOCK_JS, "<script>window.__ttsDead = true;</script>" + TTS_MOCK_JS, 1), encoding="utf-8")
+    r = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=900000", "--dump-dom", td.as_uri()], timeout=240)
+    m = re.search(r'<pre id="ttstest">(.*?)</pre>', r.stdout, re.S)
+    ok("dead engine: the test ran to the end", bool(m))
+    if m:
+        o = json.loads(html.unescape(m.group(1)))
+        log = o.get("log") or {"spoken": []}
+        ok("dead engine: reaches the last slide", o.get("ended"), "slide %s" % o.get("slide"))
+        ok("dead engine: after two failed sentences it stops trying and plays captions only", len(log["spoken"]) == 2, "tried to speak %d times" % len(log["spoken"]))
+        ok("dead engine: tells the viewer it switched to captions only", "字幕のみ" in (o.get("toastSeen") or ""), o.get("toastSeen"))
+
+    # --- 10. TLA+ model checking (only when tla2tools.jar is available) ---
+    jar = os.environ.get("TLA_JAR") or str(ROOT / "tests" / "tla" / "tla2tools.jar")
+    if os.path.exists(jar):
+        env = dict(os.environ, TLA_JAR=jar, MAXUSER=os.environ.get("MAXUSER", "2"))
+        tr = subprocess.run(["sh", str(ROOT / "tests" / "tla" / "run.sh")], capture_output=True, text=True, env=env, timeout=900)
+        ok("TLA+: the model of the current code has no violations", tr.returncode == 0, tr.stdout[-600:])
+        tb = subprocess.run(["sh", str(ROOT / "tests" / "tla" / "run.sh"), "before"], capture_output=True, text=True, env=dict(env, MAXUSER="1"), timeout=900)
+        ok("TLA+: the model of the code before the fix shows the defect", tb.returncode == 1 and "NoError is violated" in tb.stdout, tb.stdout[-300:])
+    else:
+        print("(TLA+ model checking skipped: set TLA_JAR to the path of tla2tools.jar to run it)")
+
+    fails = [x for x in results if not x[1]]
+    for name, passed, info in results:
+        if not passed:
+            print("FAIL  %s  %s" % (name, str(info)[:300]))
+    print("%d tests: %d passed, %d failed" % (len(results), len(results) - len(fails), len(fails)))
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

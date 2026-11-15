@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="corporate" translate="no" data-density="dense" data-footer="社外秘 ｜ 営業企画部 ｜ 2026年11月">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="google" content="notranslate">
+<title>営業部へのタブレット端末導入のご提案</title>
+
+<style>
+/* THEME:START - colours and fonts. A deck picks a scheme with <html data-theme="name"> (the `theme:` setting). */
+/* light (default): blue on white. The safe choice. */
+:root {
+  --bg: #ffffff;
+  --fg: #1c2333;
+  --muted: #5d6779;
+  --accent: #2563eb;        /* main colour: heading bar, emphasis, table header */
+  --accent-2: #f59e0b;      /* second colour: highlighter */
+  --accent-soft: #e4edff;   /* pale accent: cover background */
+  --card: #f3f6fb;
+  --line: #d6dce8;
+  --on-accent: #ffffff;     /* text on top of the accent colour */
+  --section-bg: #2563eb;    /* section-divider background */
+  --section-fg: #ffffff;
+  --radius: 22px;           /* card corner radius */
+  --border-w: 2px;          /* card border width */
+  --bar-w: 10px;            /* width of the bar left of headings */
+  --bar-color: var(--accent);
+  --deco-display: block;    /* decorative circles on the cover (none hides them) */
+  --ok: #15803d;            /* good */
+  --warn: #b45309;          /* caution */
+  --ng: #c0262d;            /* bad */
+  --font: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
+  --head-font: var(--font); /* heading font */
+  --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", "Noto Sans Mono CJK JP", monospace;
+}
+/* dark: navy background. Screen sharing, technical topics. */
+:root:where([data-theme="dark"]) {
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --ng: #f87171;
+  --bg: #111827;
+  --fg: #f1f5f9;
+  --muted: #a3aec2;
+  --accent: #60a5fa;
+  --accent-2: #fbbf24;
+  --accent-soft: #1e2f4d;
+  --card: #1c2638;
+  --line: #334155;
+  --on-accent: #0b1220;
+  --section-bg: #1e3a8a;
+  --section-fg: #ffffff;
+}
+/* corporate: navy and gold, square corners. Formal business documents. */
+:root:where([data-theme="corporate"]) {
+  --bg: #ffffff;
+  --fg: #14213d;
+  --muted: #5b6478;
+  --accent: #1d3a6e;
+  --accent-2: #c9a227;
+  --accent-soft: #e8ecf3;
+  --card: #f4f6fa;
+  --line: #cfd6e4;
+  --on-accent: #ffffff;
+  --section-bg: #14213d;
+  --section-fg: #ffffff;
+  --bar-color: #c9a227;
+  --radius: 4px;
+  --deco-display: none;
+}
+/* warm: cream background, serif headings. Stories and calm reading. */
+:root:where([data-theme="warm"]) {
+  --bg: #fbf6ee;
+  --fg: #2b2420;
+  --muted: #6f6258;
+  --accent: #b4532a;
+  --accent-2: #e0a100;
+  --accent-soft: #f3e4d3;
+  --card: #f5ecdf;
+  --line: #e0d2bf;
+  --on-accent: #ffffff;
+  --section-bg: #b4532a;
+  --section-fg: #ffffff;
+  --radius: 6px;
+  --bar-w: 6px;
+  --head-font: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "BIZ UDPMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
+}
+/* forest: soft green. Environment, health, education. */
+:root:where([data-theme="forest"]) {
+  --bg: #f6faf5;
+  --fg: #1d2b24;
+  --muted: #56665d;
+  --accent: #1f7a4d;
+  --accent-2: #e8a317;
+  --accent-soft: #dcf0e3;
+  --card: #ebf4ec;
+  --line: #cfe0d3;
+  --on-accent: #ffffff;
+  --section-bg: #1f7a4d;
+  --section-fg: #ffffff;
+}
+/* sakura: pale pink, round corners. Gentle announcements. */
+:root:where([data-theme="sakura"]) {
+  --bg: #fff8fa;
+  --fg: #3a2e33;
+  --muted: #7a686f;
+  --accent: #c2416c;
+  --accent-2: #f2b84b;
+  --accent-soft: #fde3ec;
+  --card: #fdeef3;
+  --line: #f1cfdb;
+  --on-accent: #ffffff;
+  --section-bg: #c2416c;
+  --section-fg: #ffffff;
+  --radius: 28px;
+}
+/* mono: black and white with a yellow highlighter, thick square lines. Minimal. */
+:root:where([data-theme="mono"]) {
+  --bg: #ffffff;
+  --fg: #111111;
+  --muted: #5a5a5a;
+  --accent: #111111;
+  --accent-2: #ffd400;
+  --accent-soft: #eeeeee;
+  --card: #ffffff;
+  --line: #111111;
+  --on-accent: #ffffff;
+  --section-bg: #111111;
+  --section-fg: #ffffff;
+  --radius: 0px;
+  --bar-w: 16px;
+  --border-w: 3px;
+  --deco-display: none;
+}
+/* pop: pink and cyan on cream, rounded type. Friendly introductions. */
+:root:where([data-theme="pop"]) {
+  --bg: #fffbea;
+  --fg: #2a2140;
+  --muted: #675f7a;
+  --accent: #d6006f;
+  --accent-2: #00b8d9;
+  --accent-soft: #ffe3f1;
+  --card: #ffffff;
+  --line: #2a2140;
+  --on-accent: #ffffff;
+  --section-bg: #d6006f;
+  --section-fg: #ffffff;
+  --radius: 30px;
+  --border-w: 3px;
+  --head-font: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
+  --font: "Hiragino Maru Gothic ProN", "UD Digi Kyokasho NK-B", "UD デジタル 教科書体 NK-B", "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif;
+}
+/* neon: cyan and pink on black. Tech and games. */
+:root:where([data-theme="neon"]) {
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --ng: #f87171;
+  --bg: #0a0a12;
+  --fg: #f2f2f7;
+  --muted: #9a9ab0;
+  --accent: #22d3ee;
+  --accent-2: #f472b6;
+  --accent-soft: #10242c;
+  --card: #14141f;
+  --line: #2e2e44;
+  --on-accent: #06121a;
+  --section-bg: #0e7490;
+  --section-fg: #ffffff;
+  --radius: 12px;
+}
+/* chalk: blackboard green with a textbook typeface. Lessons and study groups. */
+:root:where([data-theme="chalk"]) {
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --ng: #f87171;
+  --bg: #2c4a3b;
+  --fg: #f6f3e7;
+  --muted: #c3d0c4;
+  --accent: #ffe27a;
+  --accent-2: #ff9fb0;
+  --accent-soft: #365a48;
+  --card: #34574a;
+  --line: #6f8f7e;
+  --on-accent: #22382d;
+  --section-bg: #1f352a;
+  --section-fg: #ffe27a;
+  --radius: 10px;
+  --font: "UD Digi Kyokasho NK-R", "UD デジタル 教科書体 NK-R", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif;
+}
+/* THEME:END */
+</style>
+
+<style>
+/* ===== ENGINE CSS - do not edit ===== */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100%; }
+#player { position: fixed; inset: 0; height: 100dvh; overflow: hidden; background: #000; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+#player.playing:not(.ui) { cursor: none; }
+#stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background: var(--bg); overflow: hidden; }
+
+/* --- slides --- */
+.slide { word-break: auto-phrase; position: absolute; inset: 0; display: flex; flex-direction: column; gap: 28px; padding: 56px 80px 116px; font-size: 32px; line-height: 1.5; font-weight: 500; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility 0s .5s; overflow: hidden; }
+.slide.active { opacity: 1; visibility: visible; transition: opacity .5s ease; }
+.slide { justify-content: center; }
+.slide.top { justify-content: flex-start; }
+.slide.tc { align-items: center; text-align: center; }
+.slide.tc h2 { border-left: 0; padding-left: 0; }
+.slide h1, .slide h2, .slide h3, .slide p, .slide ul, .slide ol, .slide figure, .slide blockquote, .slide table, .slide pre { margin: 0; }
+.slide h1, .slide h2, .slide h3 { font-family: var(--head-font); }
+.slide h1 { font-size: 76px; line-height: 1.2; font-weight: 800; letter-spacing: .01em; }
+.slide h2 { font-size: 52px; line-height: 1.25; font-weight: 800; padding-left: 24px; border-left: var(--bar-w) solid var(--bar-color); }
+.slide h3 { font-size: 34px; line-height: 1.3; font-weight: 800; }
+.slide .kicker { font-size: 26px; font-weight: 800; color: var(--accent); letter-spacing: .08em; margin-bottom: -16px; }
+.slide .big { font-size: 44px; line-height: 1.45; font-weight: 700; }
+.slide .note { font-size: 26px; color: var(--muted); }
+.slide strong { color: var(--accent); font-weight: 800; }
+.slide mark { color: inherit; background: linear-gradient(transparent 82%, var(--accent-2) 82%); background: linear-gradient(transparent 62%, color-mix(in srgb, var(--accent-2) 55%, transparent) 62%); padding: 0 .1em; }
+.slide .badge { display: inline-block; font-size: 24px; font-weight: 800; padding: 4px 18px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
+.slide .grow { flex: 1; min-height: 0; }
+
+/* lists */
+.slide ul, .slide ol { padding: 0; list-style: none; display: flex; flex-direction: column; gap: 20px; font-size: 34px; }
+.slide ul > li, .slide ol > li { position: relative; padding-left: 52px; }
+.slide ul > li::before { content: ""; position: absolute; left: 10px; top: .52em; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); transition: transform .3s; }
+.slide ol { counter-reset: n; }
+.slide ol > li { counter-increment: n; }
+.slide ol > li::before { content: counter(n); position: absolute; left: 0; top: .16em; width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 22px; font-weight: 800; display: flex; align-items: center; justify-content: center; transition: transform .3s; }
+.slide li.speaking::before { transform: scale(1.35); }
+
+/* cover, section divider, closing slide */
+.slide.title, .slide.end { justify-content: center; align-items: flex-start; gap: 24px; background: linear-gradient(135deg, var(--accent-soft), var(--bg) 60%); }
+.slide.title::before, .slide.end::before { content: ""; display: var(--deco-display); position: absolute; right: -140px; top: -140px; width: 520px; height: 520px; border-radius: 50%; background: var(--accent); opacity: .14; }
+.slide.title::after, .slide.end::after { content: ""; display: var(--deco-display); position: absolute; right: 120px; bottom: 60px; width: 200px; height: 200px; border-radius: 50%; background: var(--accent-2); opacity: .22; }
+.slide.title .sub, .slide.end .sub { font-size: 36px; color: var(--muted); }
+.slide.section { justify-content: center; gap: 20px; background: var(--section-bg); color: var(--section-fg); }
+.slide.section h2 { font-size: 72px; border: 0; padding: 0; }
+.slide.section .kicker, .slide.section .sub { color: var(--section-fg); opacity: .85; }
+.slide.section .sub { font-size: 34px; }
+
+/* columns and cards */
+.slide .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 32px; align-items: stretch; }
+.slide .card { background: var(--card); border: var(--border-w) solid var(--line); border-radius: var(--radius); padding: 28px 30px; display: flex; flex-direction: column; gap: 12px; font-size: 28px; line-height: 1.45; transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1), border-color .3s, box-shadow .3s; }
+.slide .card.speaking { border-color: var(--accent); box-shadow: 0 0 0 6px var(--accent-soft); }
+.slide .card .emoji { font-size: 60px; line-height: 1; }
+.slide .emoji-xl { font-size: 130px; line-height: 1.1; }
+
+/* big number */
+.slide .stat { font-size: 150px; line-height: 1; font-weight: 800; color: var(--accent); letter-spacing: -.02em; }
+.slide .stat small { font-size: .36em; font-weight: 800; margin-left: .1em; letter-spacing: 0; }
+
+/* flow */
+.slide ol.flow { flex-direction: row; gap: 56px; align-items: stretch; font-size: 30px; }
+.slide ol.flow > li { flex: 1; padding: 64px 24px 26px; background: var(--card); border: var(--border-w) solid var(--line); border-radius: var(--radius); text-align: center; line-height: 1.4; font-weight: 700; }
+.slide ol.flow > li::before { left: 50%; top: 18px; margin-left: -19px; }
+.slide ol.flow > li + li::after { content: ""; position: absolute; left: -43px; top: 50%; margin-top: -16px; border: 16px solid transparent; border-left: 22px solid var(--accent); border-right: 0; }
+.slide ol.flow > li small { display: block; font-size: 24px; font-weight: 500; color: var(--muted); margin-top: 8px; }
+
+/* quote, table, figure, code */
+.slide blockquote { position: relative; font-size: 46px; line-height: 1.5; font-weight: 700; padding: 10px 0 10px 96px; }
+.slide blockquote::before { content: "“"; position: absolute; left: 0; top: -34px; font-size: 180px; line-height: 1; color: var(--accent); font-family: Georgia, serif; }
+.slide blockquote + .note, .slide cite { padding-left: 96px; font-style: normal; }
+.slide table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 28px; line-height: 1.35; }
+.slide th, .slide td { padding: 16px 20px; text-align: left; border-bottom: 2px solid var(--line); }
+.slide thead th { background: var(--accent); color: var(--on-accent); font-weight: 800; border: 0; }
+.slide thead th:first-child { border-radius: min(14px, var(--radius)) 0 0 0; } .slide thead th:last-child { border-radius: 0 min(14px, var(--radius)) 0 0; }
+.slide tbody th { font-weight: 800; }
+.slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
+.slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; border-radius: 14px; }
+.slide figcaption { font-size: 24px; color: var(--muted); }
+.slide pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; background: #0f172a; color: #e2e8f0; padding: 24px 28px; border-radius: 16px; overflow: hidden; white-space: pre-wrap; }
+.slide code { font-family: var(--mono); }
+.slide .voice { display: none !important; }
+
+/* --- components for business documents (usable on any slide) --- */
+.slide .lead { font-size: 30px; font-weight: 800; line-height: 1.4; padding: 12px 22px; background: var(--accent-soft); border-left: 8px solid var(--accent); border-radius: 0 min(12px, var(--radius)) min(12px, var(--radius)) 0; }
+.slide .rows { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.slide .cols > table { align-self: start; }
+.slide td small, .slide th small { display: block; font-size: max(.78em, 22px); font-weight: 500; line-height: 1.3; }
+.slide table.matrix td.ok small, .slide table.matrix td.warn small, .slide table.matrix td.ng small { font-size: max(.62em, 22px); font-weight: 700; margin-top: 2px; }
+.slide .box { display: flex; flex-direction: column; border: var(--border-w) solid var(--line); border-radius: min(14px, var(--radius)); background: var(--bg); font-size: 26px; line-height: 1.45; transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1), border-color .3s; }
+.slide .box.speaking { border-color: var(--accent); }
+.slide .box > h3 { font-size: 26px; padding: 8px 18px; background: var(--accent); color: var(--on-accent); border-radius: calc(min(14px, var(--radius)) - var(--border-w)) calc(min(14px, var(--radius)) - var(--border-w)) 0 0; }
+.slide .box > h3 ~ * { margin: 12px 18px 14px; }
+.slide .box ul, .slide .box ol, .slide .card ul, .slide .card ol { font-size: inherit; gap: 8px; }
+.slide .cols.arrows { gap: 60px; }
+.slide .cols.arrows > * { position: relative; }
+.slide .cols.arrows > * + *::after { content: ""; position: absolute; left: -43px; top: 50%; margin-top: -16px; border: 16px solid transparent; border-left: 22px solid var(--accent); border-right: 0; }
+.slide li > ul, .slide li > ol { margin-top: 8px; font-size: .82em; gap: 6px; }
+.slide li > ul > li { padding-left: 1.4em; }
+.slide li > ul > li::before { left: .3em; top: .68em; width: .55em; height: 3px; border-radius: 0; background: var(--muted); }
+.slide .ok { color: var(--ok); font-weight: 800; } .slide .warn { color: var(--warn); font-weight: 800; } .slide .ng { color: var(--ng); font-weight: 800; }
+.slide .tag { display: inline-block; font-size: max(.72em, 22px); font-weight: 800; line-height: 1.3; padding: .1em .6em; border: 2px solid currentColor; border-radius: .4em; white-space: nowrap; vertical-align: .1em; }
+.slide td.num, .slide th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.slide tr.total > * { font-weight: 800; border-top: 3px solid var(--fg); }
+.slide table.matrix td, .slide table.matrix thead th { text-align: center; }
+.slide table.matrix thead th:first-child { text-align: left; }
+.slide table.matrix td.ok, .slide table.matrix td.warn, .slide table.matrix td.ng { font-size: 1.25em; line-height: 1; }
+.slide table.gantt { table-layout: fixed; }
+.slide table.gantt thead th { text-align: center; padding-left: 4px; padding-right: 4px; }
+.slide table.gantt thead th:first-child, .slide table.gantt tbody th { text-align: left; width: 22%; }
+.slide table.gantt td { border-left: 1px dashed var(--line); padding-left: 0; padding-right: 0; }
+.slide table.gantt td.bar { text-align: center; font-weight: 800; color: var(--on-accent); background: linear-gradient(var(--accent), var(--accent)) center / calc(100% - 8px) calc(100% - 14px) no-repeat; white-space: nowrap; }
+.slide table.gantt td.bar.alt { color: #1c2333; background-image: linear-gradient(var(--accent-2), var(--accent-2)); }
+.slide .source { margin-top: auto; font-size: 22px; color: var(--muted); }
+.slide-footer { position: absolute; left: 56px; right: 56px; bottom: 30px; display: flex; justify-content: space-between; font-size: 16px; font-weight: 500; color: var(--muted); pointer-events: none; }
+.slide.section .slide-footer { color: var(--section-fg); opacity: .8; }
+.slide-footer { transition: transform .25s; }
+#player.ui .slide-footer { transform: translateY(var(--lift, 0px)); }
+.still .slide-footer, .capdemo .slide-footer { transform: none !important; }
+
+/* --- dense (density: dense, or class="slide dense"): information-dense slides such as meeting papers and reports --- */
+.slide:where(.dense) { font-size: 22px; line-height: 1.5; padding: 40px 56px 108px; gap: 14px; justify-content: flex-start; }
+.slide:where(.dense) h2 { font-size: 36px; padding-left: 16px; border-left-width: min(var(--bar-w), 8px); }
+.slide:where(.dense) h3 { font-size: 23px; }
+.slide:where(.dense) .kicker { font-size: 18px; margin-bottom: -6px; }
+.slide:where(.dense) .big { font-size: 30px; } .slide:where(.dense) .note { font-size: 17px; } .slide:where(.dense) .badge { font-size: 16px; padding: 2px 12px; }
+.slide:where(.dense) .lead { font-size: 24px; padding: 9px 18px; border-left-width: 6px; }
+.slide:where(.dense) ul, .slide:where(.dense) ol { font-size: 22px; gap: 8px; }
+.slide:where(.dense) ul > li, .slide:where(.dense) ol > li { padding-left: 32px; }
+.slide:where(.dense) ul > li::before { left: 8px; top: .56em; width: 11px; height: 11px; }
+.slide:where(.dense) ol > li::before { width: 24px; height: 24px; font-size: 15px; top: .2em; }
+.slide:where(.dense) li > ul > li { padding-left: 1.4em; }
+.slide:where(.dense) li > ul > li::before { left: .3em; top: .68em; width: .55em; height: 2px; }
+.slide:where(.dense) .rows { gap: 12px; } .slide:where(.dense) .cols { gap: 16px; }
+.slide:where(.dense) .cols.arrows { gap: 44px; }
+.slide:where(.dense) .cols.arrows > * + *::after { left: -32px; margin-top: -12px; border-width: 12px; border-left-width: 17px; }
+.slide:where(.dense) .card { padding: 14px 16px; font-size: 20px; gap: 6px; border-radius: min(14px, var(--radius)); }
+.slide:where(.dense) .card .emoji { font-size: 36px; }
+.slide:where(.dense) .box { font-size: 20px; }
+.slide:where(.dense) .box > h3 { font-size: 20px; padding: 5px 14px; }
+.slide:where(.dense) .box > h3 ~ * { margin: 9px 14px 11px; }
+.slide:where(.dense) .box ul, .slide:where(.dense) .box ol, .slide:where(.dense) .card ul, .slide:where(.dense) .card ol { gap: 5px; }
+.slide:where(.dense) .stat { font-size: 80px; }
+.slide:where(.dense) ol.flow { gap: 40px; font-size: 20px; }
+.slide:where(.dense) ol.flow > li { padding: 42px 12px 14px; border-radius: min(14px, var(--radius)); }
+.slide:where(.dense) ol.flow > li::before { top: 11px; margin-left: -12px; }
+.slide:where(.dense) ol.flow > li + li::after { left: -30px; margin-top: -12px; border-width: 12px; border-left-width: 17px; }
+.slide:where(.dense) ol.flow > li small { font-size: 16px; margin-top: 4px; }
+.slide:where(.dense) blockquote { font-size: 30px; padding-left: 64px; }
+.slide:where(.dense) blockquote::before { font-size: 120px; top: -22px; }
+.slide:where(.dense) table { font-size: 18px; line-height: 1.35; }
+.slide:where(.dense) th, .slide:where(.dense) td { padding: 7px 12px; border-bottom-width: 1px; }
+.slide:where(.dense) tbody tr:nth-child(even) > * { background-color: color-mix(in srgb, var(--card) 75%, transparent); }
+.slide:where(.dense) table.gantt td.bar { background-size: calc(100% - 6px) calc(100% - 10px); }
+.slide:where(.dense) figcaption { font-size: 16px; } .slide:where(.dense) pre { font-size: 17px; padding: 14px 18px; }
+.slide:where(.dense) .source { font-size: 15px; }
+.slide:where(.dense) .tag { font-size: max(.72em, 15px); }
+.slide:where(.dense) td small, .slide:where(.dense) th small { font-size: max(.78em, 14px); }
+.slide:where(.dense) table.matrix td.ok small, .slide:where(.dense) table.matrix td.warn small, .slide:where(.dense) table.matrix td.ng small { font-size: max(.62em, 14px); }
+
+/* entrance animations */
+.slide [data-say] { transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+.slide .pending { opacity: 0 !important; transform: translateY(30px); }
+.slide .pending[data-anim="fade"] { transform: none; }
+.slide .pending[data-anim="zoom"] { transform: scale(.82); }
+.slide .pending[data-anim="pop"] { transform: scale(.4); }
+.slide .pending[data-anim="left"] { transform: translateX(-60px); }
+.slide .pending[data-anim="right"] { transform: translateX(60px); }
+.slide svg [data-say] { transform-box: fill-box; transform-origin: center; }
+.slide svg [transform][data-say] { transition: opacity .6s ease; }
+.slide svg [transform].pending { transform: none; }
+.slide.jump [data-say] { transition: none !important; }
+.no-anim *, .no-anim *::before, .no-anim *::after { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .slide .pending { transform: none !important; } }
+
+/* --- captions --- */
+#caption { position: absolute; left: 0; right: 0; display: flex; justify-content: center; padding: 0 4%; pointer-events: none; opacity: 0; transition: opacity .2s, transform .25s; z-index: 5; }
+#caption.show { opacity: 1; }
+#caption-text { word-break: auto-phrase; background: rgba(0,0,0,.8); color: #fff; padding: .28em .8em; border-radius: .35em; line-height: 1.45; text-align: center; max-width: 46em; font-weight: 500; text-wrap: balance; }
+#player.ui #caption.overlay { transform: translateY(-58px); }
+.capdemo #player #caption.overlay { transform: none; }
+
+/* --- control bar --- */
+#controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; padding: 18px max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: linear-gradient(transparent, rgba(0,0,0,.82) 45%); color: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; font: 500 14px/1 var(--font); }
+#player.ui #controls { opacity: 1; pointer-events: auto; }
+#bar { display: flex; gap: 3px; padding: 0 4px; }
+#bar button { flex: 1 1 0; min-width: 0; height: 22px; padding: 8px 0; border: 0; background: none; cursor: pointer; }
+#bar button span { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,.3); overflow: hidden; }
+#bar button i { display: block; height: 100%; width: 0; background: #fff; transition: width .3s linear; }
+#bar button:hover span { background: rgba(255,255,255,.5); }
+#btns { display: flex; align-items: center; gap: 2px; }
+#btns button { width: 44px; height: 40px; border: 0; background: none; color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font: 700 14px/1 var(--font); flex: none; }
+#btns button:hover { background: rgba(255,255,255,.16); }
+#btns button:focus-visible, #bar button:focus-visible, #start button:focus-visible { outline: 3px solid #fff; outline-offset: 1px; }
+#btns button.off { opacity: .45; }
+#btns svg { width: 24px; height: 24px; fill: currentColor; }
+#count { padding: 0 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#btns .sp { flex: 1; }
+#voice { max-width: 190px; height: 32px; margin: 0 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.4); background: rgba(0,0,0,.5); color: #fff; font: 500 13px var(--font); }
+@media (max-width: 640px) { #voice { display: none; } #btns button { width: 40px; } }
+@media (max-width: 440px) { #btns button { width: 34px; } #btns svg { width: 22px; height: 22px; } #count { padding: 0 4px; font-size: 13px; } #b-full { display: none !important; } }
+
+/* --- start screen --- */
+#start { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; background: rgba(8,12,22,.72); color: #fff; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+#start[hidden] { display: none; }
+#start-title { font-size: clamp(20px, 3.6vw, 44px); font-weight: 800; line-height: 1.3; max-width: 22em; }
+#start-meta { font-size: clamp(13px, 1.6vw, 18px); opacity: .8; }
+#start-play { width: clamp(84px, 13vw, 132px); height: clamp(84px, 13vw, 132px); border-radius: 50%; border: 0; background: #fff; color: #111; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 40px rgba(0,0,0,.5); transition: transform .15s; }
+#start-play:hover { transform: scale(1.06); }
+#start-play svg { width: 48%; height: 48%; fill: currentColor; margin-left: 6%; }
+#start-silent { border: 1px solid rgba(255,255,255,.55); background: none; color: #fff; padding: 10px 20px; border-radius: 999px; cursor: pointer; font: 500 clamp(13px, 1.5vw, 16px) var(--font); }
+#start-hint { font-size: 13px; opacity: .7; display: none; }
+@media (orientation: portrait) and (max-width: 640px) { #start-hint { display: block; } }
+#toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 30; background: rgba(0,0,0,.85); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 90%; }
+#toast.show { opacity: 1; }
+/* --- slide overview --- */
+#overview { position: absolute; inset: 0; z-index: 25; background: rgba(8,12,22,.94); color: #fff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
+#overview[hidden] { display: none; }
+#ov-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 14px; font: 800 18px var(--font); }
+#ov-close { width: 44px; height: 40px; border: 0; border-radius: 8px; background: rgba(255,255,255,.14); color: #fff; font-size: 22px; cursor: pointer; }
+#ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 40vw), 1fr)); gap: 16px; }
+.ov-item { position: relative; display: block; width: 100%; padding: 0; border: 3px solid transparent; border-radius: 10px; background: none; cursor: pointer; overflow: hidden; aspect-ratio: 16 / 9; }
+.ov-item:hover { border-color: rgba(255,255,255,.6); }
+.ov-item.current { border-color: #fff; }
+.ov-item:focus-visible, #ov-close:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ov-frame { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background: var(--bg); color: var(--fg); pointer-events: none; text-align: left; }
+.ov-num { position: absolute; left: 6px; bottom: 6px; min-width: 26px; padding: 3px 7px; border-radius: 6px; background: rgba(0,0,0,.75); color: #fff; font: 700 13px/1.2 var(--font); text-align: center; }
+.still #controls, .still #start, .still #caption, .still #toast, .still #overview { display: none !important; }
+.capdemo #controls, .capdemo #start, .capdemo #toast, .capdemo #overview { display: none !important; }
+#check-report { position: absolute; inset: 0; z-index: 99; margin: 0; padding: 16px; background: #fff; color: #000; font: 13px/1.5 monospace; overflow: auto; white-space: pre-wrap; }
+
+/* --- print / PDF: one slide per page --- */
+@media print {
+  @page { size: 1280px 720px; margin: 0; }
+  html, body { height: auto; overflow: visible; background: #fff; }
+  #player { position: static; height: auto; overflow: visible; background: none; }
+  #stage { position: static; transform: none !important; height: auto; overflow: visible; }
+  .slide { position: relative; inset: auto; width: 1280px; height: 720px; opacity: 1 !important; visibility: visible !important; break-after: page; page-break-after: always; }
+  .slide .pending { opacity: 1 !important; transform: none !important; }
+  .slide-footer { transform: none !important; }
+  #controls, #start, #caption, #toast, #overview { display: none !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div id="player">
+<main id="stage">
+<!-- SLIDES:START - build.py replaces everything from this line down to SLIDES:END -->
+
+<section class="slide title">
+  <p class="kicker" data-say="稟議にあたり、">稟議資料　営業企画部</p>
+  <h1 data-say="営業部へのタブレット端末導入を、ご提案します。">営業部への<br>タブレット端末導入</h1>
+  <p class="sub" data-say="お願いしたいのは、A案での導入と、初年度予算の承認です。" data-caption="お願いしたいのは、A案での導入と、初年度予算896万円の承認です。">A案での導入と、初年度予算896万円の承認のお願い</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="まず、現状の問題です。">現状の問題：外回り営業80名の事務負担</h2>
+  <p class="lead" data-say="紙の資料と帰社後の入力が、時間とコストと品質の損失になっています。">紙の資料と帰社後入力が、時間・費用・品質の損失を生んでいる</p>
+  <div class="cols">
+    <div class="box" data-say="商談後に帰社して入力するため、一人あたり毎日四十五分の事務作業が発生しています。" data-caption="商談後に帰社して入力するため、1人あたり毎日45分の事務作業が発生しています。">
+      <h3>時間</h3>
+      <p class="stat" style="font-size:64px">45<small>分／人・日</small></p>
+      <p>80名が紙の資料と見積書を持ち歩き、帰社後に入力</p>
+    </div>
+    <div class="box" data-say="紙資料の印刷費は、年間で約三百六十万円かかっています。" data-caption="紙資料の印刷費は、年間で約360万円かかっています。">
+      <h3>費用</h3>
+      <p class="stat" style="font-size:64px">約360<small>万円／年</small></p>
+      <p>紙資料の印刷費</p>
+    </div>
+    <div class="box" data-say="最新版でない資料を使う事故が年に十数件あり、見積の提出にも平均二・三日かかっています。" data-caption="最新版でない資料を使う事故が年に十数件あり、見積の提出にも平均2.3日かかっています。">
+      <h3>品質・速度</h3>
+      <p class="stat" style="font-size:64px">十数<small>件／年</small></p>
+      <p>旧版資料の使用事故。見積提出は平均2.3日</p>
+    </div>
+  </div>
+  <div class="box" data-say="原因は、商談の場で完結できず、帰社後に入力し直す運用にあります。">
+    <h3>原因</h3>
+    <ul><li>資料も見積書も紙のため、商談の場で作成・更新できない</li><li>商談後に帰社して入力し直すため、見積の提出が遅れ、旧版資料の使用も防げない</li></ul>
+  </div>
+  <p class="source">出典：営業企画部 調べ（外回り営業担当80名、紙資料・見積書の運用実態）</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="次に、提案内容と効果です。">提案：タブレット80台で、出先で業務を完結</h2>
+  <p class="lead" data-say="事務作業は三分の一になり、見積は当日提出できます。">事務作業は3分の1、見積は当日提出、印刷費は4分の1に</p>
+  <div class="cols arrows">
+    <div class="box" data-say="閲覧、見積作成、日報入力を、すべて出先で済ませます。"><h3>導入するもの</h3><ul><li>タブレット80台（A案）</li><li>資料の閲覧</li><li>見積作成</li><li>日報入力</li></ul></div>
+    <div class="box" data-say="その結果、帰社後の入力がなくなり、事務作業は一日十五分に減ります。" data-caption="その結果、帰社後の入力がなくなり、事務作業は1日15分に減ります。"><h3>変わること</h3><ul><li>帰社後の入力が不要</li><li>最新版の資料を常に閲覧</li><li>商談中に見積を作成</li></ul></div>
+  </div>
+  <table class="matrix">
+    <thead><tr><th>項目</th><th>現状</th><th>導入後</th><th>効果</th></tr></thead>
+    <tbody>
+      <tr data-say="事務作業は、一日四十五分から十五分になります。" data-caption="事務作業は、1日45分から15分になります。"><th>事務作業（1人1日）</th><td>45分</td><td class="ok">15分</td><td>年間約9,600時間削減（人件費換算 約2,880万円）</td></tr>
+      <tr data-say="印刷費は、年三百六十万円から九十万円になります。" data-caption="印刷費は、年360万円から90万円になります。"><th>印刷費（年）</th><td>360万円</td><td class="ok">90万円</td><td>年270万円の削減</td></tr>
+      <tr data-say="見積の提出は、二・三日から当日になります。" data-caption="見積の提出は、2.3日から当日になります。"><th>見積提出</th><td>平均2.3日</td><td class="ok">当日</td><td>機会損失の防止</td></tr>
+    </tbody>
+  </table>
+  <p class="source">※ 削減額270万円は、印刷費360万円と90万円の差。人件費換算は事務作業の削減時間による</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="続いて、機種の比較です。">機種の比較：3案</h2>
+  <p class="lead" data-say="管理のしやすさと実績から、A案を推奨します。">管理ツール対応・ペン入力・実績のバランスで、A案を推奨</p>
+  <table class="matrix">
+    <thead><tr><th>評価項目</th><th>A案 iPad（第10世代相当）</th><th>B案 Androidタブレット</th><th>C案 Windowsタブレット</th></tr></thead>
+    <tbody>
+      <tr data-say="一台あたりの価格は、A案が六・八万円、B案が四・二万円、C案が十二・五万円です。" data-caption="1台あたりの価格は、A案が6.8万円、B案が4.2万円、C案が12.5万円です。"><th>1台の価格</th><td>6.8万円</td><td class="ok">4.2万円</td><td class="ng">12.5万円</td></tr>
+      <tr data-say="管理ツールへの対応は、AとCが◎、Bが○です。" data-caption="管理ツールへの対応は、A案とC案が◎、B案が○です。"><th>管理ツール対応</th><td class="ok">◎</td><td class="ok">○</td><td class="ok">◎</td></tr>
+      <tr data-say="ペン入力は、AとCが○、Bは△です。" data-caption="ペン入力は、A案とC案が○、B案が△です。"><th>ペン入力</th><td class="ok">○</td><td class="warn">△</td><td class="ok">○</td></tr>
+      <tr data-say="A案は社内に利用実績があり、B案には実績がありません。"><th>実績・運用</th><td class="ok">○<small>社内の利用実績あり</small></td><td class="ng">×<small>実績なし</small></td><td class="warn">△<small>既存PCと同じ運用。約900gで重い</small></td></tr>
+      <tr class="total" data-say="以上から、A案を推奨します。"><th>総合評価</th><td class="ok">◎ 推奨</td><td class="warn">△</td><td class="warn">△</td></tr>
+    </tbody>
+  </table>
+  <p class="source">※ 価格は端末1台あたり。実績は社内での利用経験の有無</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="次に、費用と投資回収です。">A案の費用と投資回収</h2>
+  <p class="lead" data-say="初年度の八百九十六万円は、初年度の効果で回収できる見込みです。" data-caption="初年度の896万円は、初年度の効果で回収できる見込みです。">初年度896万円は、初年度の効果で回収できる見込み</p>
+  <div class="cols grow" style="grid-template-columns: 3fr 2fr; grid-auto-flow: row">
+    <table data-say="初年度の費用は、合計八百九十六万円です。" data-caption="初年度の費用は、合計896万円です。">
+      <thead><tr><th>費目</th><th class="num">初年度</th><th class="num">2年目以降（年）</th></tr></thead>
+      <tbody>
+        <tr><th>端末（80台）</th><td class="num">544万円</td><td class="num">－</td></tr>
+        <tr><th>ケース・ペン</th><td class="num">64万円</td><td class="num">－</td></tr>
+        <tr><th>管理ツール</th><td class="num">96万円</td><td class="num">96万円</td></tr>
+        <tr><th>通信費</th><td class="num">192万円</td><td class="num">192万円</td></tr>
+        <tr class="total"><th>合計</th><td class="num">896万円</td><td class="num">288万円</td></tr>
+      </tbody>
+    </table>
+    <div class="rows">
+      <div class="card" data-say="効果は、人件費換算で年間約二千八百八十万円です。" data-caption="効果は、人件費換算で年間約2,880万円です。"><h3>事務作業の削減（人件費換算）</h3><p class="stat" style="font-size:56px">約2,880<small>万円／年</small></p></div>
+      <div class="card" data-say="加えて、印刷費が年間二百七十万円減ります。" data-caption="加えて、印刷費が年間270万円減ります。"><h3>印刷費の削減</h3><p class="stat" style="font-size:56px">270<small>万円／年</small></p></div>
+    </div>
+  </div>
+  <div class="box" data-say="効果の合計は年間約三千百五十万円で、初年度の費用を上回ります。" data-caption="効果の合計は年間約3,150万円で、初年度の費用を上回ります。">
+    <h3>回収の考え方</h3>
+    <ul><li>効果 約3,150万円／年（人件費換算2,880万円 ＋ 印刷費削減270万円）が、初年度費用896万円を上回る</li></ul>
+  </div>
+  <p class="voice" data-say="内訳は、端末五百四十四万円と、ケースとペン六十四万円。" data-caption="内訳は、端末544万円と、ケースとペン64万円。"></p>
+  <p class="voice" data-say="管理ツール九十六万円と、通信費百九十二万円です。" data-caption="管理ツール96万円と、通信費192万円です。"></p>
+  <p class="voice" data-say="二年目以降は、管理ツールと通信費で年二百八十八万円です。" data-caption="2年目以降は、管理ツールと通信費で年288万円です。"></p>
+  <p class="source">※ 効果は年間の見込み。印刷費は360万円から90万円への削減。投資回収は初年度で見込む</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="導入のスケジュールです。">導入スケジュール：4月に全80名で利用開始</h2>
+  <p class="lead" data-say="十二月に決裁・発注し、四月に全員で使い始めます。" data-caption="12月に決裁・発注し、4月に全員で使い始めます。">12月に決裁・発注、2月に20名で試行し、4月に全員で開始</p>
+  <table class="gantt">
+    <thead><tr><th>作業</th><th>12月</th><th>1月</th><th>2月</th><th>3月</th><th>4月</th></tr></thead>
+    <tbody>
+      <tr data-say="十二月に、稟議の決裁と発注をおこないます。" data-caption="12月に、稟議の決裁と発注をおこないます。"><th>稟議決裁・発注</th><td class="bar">決裁・発注</td><td></td><td></td><td></td><td></td></tr>
+      <tr data-say="一月に、キッティングと管理ツールの設定をします。" data-caption="1月に、キッティングと管理ツールの設定をします。"><th>キッティング・設定</th><td></td><td class="bar">管理ツール設定</td><td></td><td></td><td></td></tr>
+      <tr data-say="二月に、第一営業部の二十名で試行します。" data-caption="2月に、第1営業部の20名で試行します。"><th>試行</th><td></td><td></td><td class="bar alt">第1営業部 20名</td><td></td><td></td></tr>
+      <tr data-say="三月に、全員向けの研修をおこないます。" data-caption="3月に、全員向けの研修をおこないます。"><th>全員向け研修</th><td></td><td></td><td></td><td class="bar">研修</td><td></td></tr>
+      <tr data-say="四月に、全八十名で利用を開始します。" data-caption="4月に、全80名で利用を開始します。"><th>利用開始</th><td></td><td></td><td></td><td></td><td class="bar alt">全80名</td></tr>
+    </tbody>
+  </table>
+  <p class="source">※ 2月の試行結果を踏まえ、3月の研修内容を調整する</p>
+</section>
+
+<section class="slide">
+  <h2 data-say="最後に、リスクと、お願いしたいことです。">リスクと対策、承認のお願い</h2>
+  <p class="lead" data-say="主なリスクには対策済みです。" data-caption="主なリスクには対策済みです。">3つのリスクに対策済み。A案での導入と初年度予算896万円の承認を</p>
+  <div class="cols">
+    <div class="box" data-say="紛失や盗難には、遠隔ロックと遠隔消去で備えます。"><h3><span class="tag warn">リスク</span> 紛失・盗難</h3><p>対策：遠隔ロックと遠隔消去</p></div>
+    <div class="box" data-say="使いこなせない人が出ても、部ごとの推進担当がフォローします。"><h3><span class="tag warn">リスク</span> 使いこなせない</h3><p>対策：部ごとに推進担当を置く</p></div>
+    <div class="box" data-say="通信障害に備え、資料はオフラインでも見られるようにします。"><h3><span class="tag warn">リスク</span> 通信障害</h3><p>対策：資料をオフラインでも閲覧可能に</p></div>
+  </div>
+  <p class="voice" data-say="そのうえで、A案での導入と、初年度予算の承認をお願いします。" data-caption="そのうえで、A案での導入と、初年度予算896万円の承認をお願いします。"></p>
+  <div class="box" data-say="ご承認いただきたいのは、この二点です。">
+    <h3>承認のお願い</h3>
+    <ul><li>A案（iPad）での導入</li><li>初年度予算896万円の承認（2年目以降は年288万円）</li></ul>
+  </div>
+  <div class="box" data-say="承認後は、十二月に発注し、四月に全員で利用を開始します。" data-caption="承認後は、12月に発注し、4月に全員で利用を開始します。">
+    <h3>承認後のスケジュール</h3>
+    <ul><li>12月：稟議決裁・発注　→　2月：第1営業部（20名）で試行　→　4月：全80名で利用開始</li></ul>
+  </div>
+</section>
+
+<!-- SLIDES:END -->
+</main>
+
+<div id="caption" aria-hidden="true"><span id="caption-text"></span></div>
+
+<div id="start">
+  <div id="start-title"></div>
+  <button id="start-play" type="button" data-ta="play"><svg viewBox="0 0 24 24"><path d="M6 3.5v17L21 12z"/></svg></button>
+  <div id="start-meta"></div>
+  <button id="start-silent" type="button" data-t="silent"></button>
+  <div id="start-hint" data-t="rotate"></div>
+</div>
+
+<div id="controls">
+  <div id="bar"></div>
+  <div id="btns">
+    <button id="b-prev" type="button" data-ta="prev" data-key="←"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+    <button id="b-play" type="button" data-ta="playPause" data-key="Space"><svg viewBox="0 0 24 24"><path id="i-play" d="M6 3.5v17L21 12z"/></svg></button>
+    <button id="b-next" type="button" data-ta="next" data-key="→"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+    <span id="count"></span>
+    <span class="sp"></span>
+    <select id="voice" data-ta="voice" hidden></select>
+    <button id="b-rate" type="button" data-ta="rate" data-key="&lt; &gt;">1x</button>
+    <button id="b-mute" type="button" data-ta="sound" data-key="M"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm11.5-1.2v8.4a4.5 4.5 0 0 0 0-8.4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
+    <button id="b-cc" type="button" data-ta="captions" data-key="C"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm1 9h8v2H5zm10 0h4v2h-4zM5 9h4v2H5zm6 0h8v2h-8z"/></svg></button>
+    <button id="b-grid" type="button" data-ta="overview" data-key="G"><svg viewBox="0 0 24 24"><path d="M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z"/></svg></button>
+    <button id="b-full" type="button" data-ta="fullscreen" data-key="F"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+  </div>
+</div>
+<div id="overview" role="dialog" data-ta="overview" hidden>
+  <div id="ov-head"><span data-t="overview"></span><button id="ov-close" type="button" data-ta="closeOverview" data-key="Esc">×</button></div>
+  <div id="ov-grid"></div>
+</div>
+<div id="toast" role="status"></div>
+</div>
+
+<script>
+/* ===== ENGINE JS - do not edit ===== */
+(function () {
+  'use strict';
+  var W = 1280, H = 720, CAPTION_BAND = 100;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var qs = new URLSearchParams(location.search);
+  var STILL = qs.has('still'), CHECK = qs.has('check');
+  var root = document.documentElement, player = $('#player'), stage = $('#stage');
+  var capEl = $('#caption'), capText = $('#caption-text'), startEl = $('#start'), toastEl = $('#toast');
+  var slides = $$('#stage > section.slide');
+  var lang = root.lang || 'ja';
+
+  /* ---------- UI text ---------- */
+  // English by default. A deck whose language is Japanese (lang: ja) gets Japanese labels, because its viewers read Japanese.
+  // To add another language, add a block here keyed by the language code.
+  var TEXT = {
+    en: {
+      play: 'Play', pause: 'Pause', playPause: 'Play / pause', prev: 'Previous slide', next: 'Next slide',
+      voice: 'Narration voice', rate: 'Playback speed', sound: 'Sound on / off', captions: 'Captions on / off',
+      overview: 'All slides', closeOverview: 'Close', fullscreen: 'Full screen',
+      silent: 'Play without sound (captions only)', rotate: 'Rotate your phone for a larger view', replay: 'Play again',
+      slide: 'slide', goto: 'Go to slide {n}', meta: '{n} slides · {t}', aboutSec: 'about {n} sec', aboutMin: 'about {n} min',
+      noVoice: 'No on-device voice is available, so the deck continues with captions only',
+      ttsFail: 'Narration could not be played, so the deck continues with captions only'
+    },
+    ja: {
+      play: '再生', pause: '一時停止', playPause: '再生 / 一時停止', prev: '前のスライド', next: '次のスライド',
+      voice: '読み上げの声', rate: '再生速度', sound: '音声 オン / オフ', captions: '字幕 オン / オフ',
+      overview: 'スライド一覧', closeOverview: '閉じる', fullscreen: '全画面',
+      silent: '音声なしで再生（字幕のみ）', rotate: '横向きにすると大きく表示されます', replay: 'もう一度再生',
+      slide: 'スライド', goto: 'スライド {n} へ', meta: '全{n}枚・{t}', aboutSec: '約{n}秒', aboutMin: '約{n}分',
+      noVoice: 'この端末には使える音声がないため、字幕のみで進みます',
+      ttsFail: '音声を再生できないため、字幕のみで進みます'
+    }
+  };
+  var LOCAL = TEXT[lang.split('-')[0].toLowerCase()] || TEXT.en;
+  function tr(k) { return LOCAL[k] || TEXT.en[k] || k; }
+  $$('[data-t]').forEach(function (el) { el.textContent = tr(el.getAttribute('data-t')); });
+  $$('[data-ta]').forEach(function (el) {
+    var label = tr(el.getAttribute('data-ta')), key = el.getAttribute('data-key');
+    el.setAttribute('aria-label', label); el.title = label + (key ? ' (' + key + ')' : '');
+  });
+  var footText = root.getAttribute('data-footer');
+  if (root.getAttribute('data-density') === 'dense') slides.forEach(function (s) { // density: dense applies to every slide except the cover, section dividers and the closing slide
+    if (!/(^|\s)(title|section|end)(\s|$)/.test(s.className)) s.classList.add('dense');
+  });
+  if (footText !== null) slides.forEach(function (s, i) { // footer text and page number on every slide except the cover
+    if (s.classList.contains('title')) return;
+    var f = document.createElement('div'); f.className = 'slide-footer'; f.setAttribute('data-bleed', ''); f.setAttribute('aria-hidden', 'true');
+    var a = document.createElement('span'); a.textContent = footText; var b = document.createElement('span'); b.textContent = (i + 1) + ' / ' + slides.length;
+    f.appendChild(a); f.appendChild(b); s.appendChild(f);
+  });
+  var synth = window.speechSynthesis || null;
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem('hs:' + k); return v === null ? d : v; } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem('hs:' + k, v); } catch (e) {} }
+  };
+  if (qs.get('theme')) root.setAttribute('data-theme', qs.get('theme')); // preview another theme without rebuilding
+  if (STILL || CHECK || qs.has('noanim')) root.classList.add('no-anim');
+  if (STILL) root.classList.add('still');
+
+  /* ---------- timeline ---------- */
+  function clean(t) { return (t || '').replace(/\s+/g, ' ').replace(/([^\x00-\x7F])\s+(?=[^\x00-\x7F])/g, '$1').trim(); }
+  function split(t) {
+    var out = [], b = '', cs = Array.from(clean(t)), END = '。！？!?', CLOSE = '。！？!?」』）)';
+    for (var i = 0; i < cs.length; i++) {
+      var ch = cs[i]; b += ch;
+      if (END.indexOf(ch) >= 0 || (ch === '.' && (cs[i + 1] === ' ' || i === cs.length - 1))) {
+        while (i + 1 < cs.length && CLOSE.indexOf(cs[i + 1]) >= 0) b += cs[++i];
+        if (b.trim()) out.push(b.trim());
+        b = '';
+      }
+    }
+    if (b.trim()) out.push(b.trim());
+    return out;
+  }
+  function est(t) { // estimated speaking time (ms at 1x)
+    var wide = 0, narrow = 0;
+    Array.from(t).forEach(function (c) { if (c.charCodeAt(0) > 0x7f) wide++; else narrow++; });
+    return Math.max(900, wide * 180 + narrow * 65);
+  }
+  var timeline = slides.map(function (s) {
+    var cues = $$('[data-say], .voice', s).map(function (el) {
+      var say = el.hasAttribute('data-say') && el.getAttribute('data-say').trim() ? el.getAttribute('data-say') : el.textContent;
+      var cap = el.getAttribute('data-caption');
+      var parts;
+      if (cap) {
+        var sp = split(say), cp = split(cap);
+        parts = sp.length === cp.length ? sp.map(function (x, k) { return { say: x, cap: cp[k] }; }) : [{ say: clean(say), cap: clean(cap) }];
+      } else parts = split(say).map(function (x) { return { say: x, cap: x }; });
+      return { el: el, reveal: !el.classList.contains('voice'), parts: parts };
+    }).filter(function (c) { return c.parts.length; });
+    if (!cues.length) { // no narration written: read the visible text
+      var txt = $$('h1,h2,h3,p,li,td,th,blockquote,figcaption', s).map(function (e) { return clean(e.textContent); }).filter(Boolean).join('。');
+      var ps = split(txt).map(function (x) { return { say: x, cap: x }; });
+      if (ps.length) cues = [{ el: s, reveal: false, parts: ps, fallback: true }];
+    }
+    cues.forEach(function (c) { c.parts.forEach(function (p) { p.dur = est(p.say) + 250; }); c.dur = c.parts.reduce(function (a, p) { return a + p.dur; }, 0); });
+    return cues;
+  });
+  var slideDur = timeline.map(function (T) { return T.reduce(function (a, c) { return a + c.dur; }, 0) + 1200; });
+  var totalDur = slideDur.reduce(function (a, b) { return a + b; }, 0);
+  slides.forEach(function (s, i) {
+    var h = $('h1,h2', s);
+    s.setAttribute('role', 'group'); s.setAttribute('aria-roledescription', tr('slide'));
+    s.setAttribute('aria-label', (i + 1) + ' / ' + slides.length + (h ? ' ' + clean(h.textContent) : ''));
+  });
+
+  /* ---------- state ---------- */
+  var everPlayed = false, cur = 0, cueIdx = 0, partIdx = 0, playing = false, mid = false, ended = false, tok = 0;
+  var muted = qs.has('mute') || store.get('muted', '0') === '1';
+  var capsOn = store.get('caps', '1') === '1';
+  var RATES = [0.75, 1, 1.25, 1.5, 2];
+  var rate = parseFloat(store.get('rate', '1')); if (RATES.indexOf(rate) < 0) rate = 1;
+  var bootT = Date.now(), voice = null, ttsBroken = false, keep = null, unlocked = false, triedLocal = false, noLocalVoice = false, noVoiceToast = false, ttsFails = 0;
+
+  /* ---------- voices ---------- */
+  var voiceSel = $('#voice');
+  function loadVoices() {
+    if (!synth) return;
+    var pre = lang.split('-')[0].toLowerCase();
+    var vs = synth.getVoices().filter(function (v) { return (v.lang || '').replace('_', '-').toLowerCase().indexOf(pre) === 0; });
+    // Online voices (Edge "Natural", Chrome "Google") send the narration text to a remote server, so they are never used. On-device voices only.
+    vs = vs.filter(function (v) { return v.localService !== false; });
+    if (!vs.length) { voice = null; noLocalVoice = true; return; }
+    noLocalVoice = false;
+    var saved = store.get('voice', '');
+    function score(v) { return (v.name === saved ? 1000 : 0) + (/Enhanced|Premium|拡張|プレミアム/i.test(v.name) ? 20 : 0) + (v.default ? 5 : 0); }
+    vs.sort(function (a, b) { return score(b) - score(a); });
+    voice = vs[0];
+    voiceSel.innerHTML = '';
+    vs.forEach(function (v) { var o = document.createElement('option'); o.value = v.name; o.textContent = v.name.replace(/^Microsoft /, '').replace(/ - .*$/, ''); voiceSel.appendChild(o); });
+    voiceSel.value = voice.name; voiceSel.hidden = vs.length < 2 || hasClips;
+    voiceSel._list = vs;
+  }
+  if (synth) {
+    loadVoices();
+    if (synth.addEventListener) synth.addEventListener('voiceschanged', loadVoices);
+    [250, 1000, 2500].forEach(function (ms) { setTimeout(function () { if (!voice) loadVoices(); }, ms); });
+  }
+  voiceSel.addEventListener('change', function () {
+    var v = (voiceSel._list || []).filter(function (x) { return x.name === voiceSel.value; })[0];
+    if (v) { voice = v; store.set('voice', v.name); ttsBroken = false; restartPart(); }
+    voiceSel.blur();
+  });
+
+  /* ---------- narration ---------- */
+  /* Embedded audio (scripts/add_voice.py inserts #voice-data). Sentences without a clip are read by the device voice. */
+  var clips = {};
+  try { var vd = document.getElementById('voice-data'); if (vd) clips = JSON.parse(vd.textContent).clips || {}; } catch (e) {}
+  var hasClips = Object.keys(clips).length > 0, audio = hasClips ? new Audio() : null, audioBroken = false;
+  if (hasClips) voiceSel.hidden = true;
+  var SILENT = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+  function stopSpeech() { if (synth) { try { synth.cancel(); } catch (e) {} } if (audio) { try { audio.pause(); } catch (e) {} } }
+  function unlock() { // mobile browsers only allow speech that starts inside a user gesture
+    if (unlocked || muted) return; unlocked = true;
+    if (audio) { try { audio.src = SILENT; var p = audio.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+    if (synth && !voice) loadVoices();
+    if (synth && voice) try { var u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = voice.lang; u.voice = voice; synth.speak(u); } catch (e) {}
+  }
+  function speak(text, my, done) {
+    var fired = false, wd = 0, st = 0, dur = est(text) / rate;
+    function fin() { if (fired) return; fired = true; clearTimeout(wd); clearTimeout(st); if (my === tok && playing) done(); }
+    function silent() { clearTimeout(wd); clearTimeout(st); wd = setTimeout(fin, dur); }
+    if (muted || !text.trim()) { silent(); return; }
+    if (audio && clips[text] && !audioBroken) {
+      var afail = function () { if (fired || my !== tok) return; audioBroken = true; fired = true; clearTimeout(wd); speak(text, my, done); };
+      audio.onended = fin; audio.onerror = afail;
+      try {
+        audio.src = clips[text]; audio.defaultPlaybackRate = rate; audio.playbackRate = rate;
+        var pr = audio.play(); if (pr && pr.catch) pr.catch(function (err) { if (err && err.name === 'AbortError') return; if (err && err.name === 'NotAllowedError') { if (!fired && my === tok) { clearTimeout(wd); silent(); } return; } afail(); });
+      } catch (e) { afail(); return; }
+      wd = setTimeout(fin, dur * 2.5 + 6000);
+      return;
+    }
+    if (synth && !voice) loadVoices(); // the voice list can arrive late
+    if (synth && !voice && !ttsBroken && !synth.getVoices().length && Date.now() - bootT < 2500) {
+      // the list has not arrived yet: wait briefly and retry so the first sentence is not skipped
+      wd = setTimeout(function () { if (!fired && my === tok && playing) { fired = true; speak(text, my, done); } }, 250);
+      return;
+    }
+    if (!synth || ttsBroken || !voice) {
+      if (synth && !voice && !ttsBroken && !noVoiceToast) { noVoiceToast = true; toast(tr('noVoice')); updateUI(); }
+      silent(); return;
+    }
+    var u;
+    try { u = new SpeechSynthesisUtterance(text); } catch (e) { silent(); return; }
+    u.lang = voice ? voice.lang : lang; if (voice) u.voice = voice; u.rate = rate;
+    // failed: once this sentence has been judged a failure, every late notification about the cancelled
+    // utterance (end, error, start) is ignored and only the caption-length timer moves playback on.
+    // Otherwise the sentence could end instantly, or the failure count could be reset to 0 so the player
+    // never falls back to captions only (found by model checking tests/tla/Player.tla).
+    var began = false, failed = false;
+    u.onstart = function () { if (failed) return; began = true; clearTimeout(st); };
+    u.onend = function () { if (fired || failed || my !== tok) return; ttsFails = 0; clearInterval(pollT); fin(); };
+    u.onerror = function (e) { if (failed || (e && (e.error === 'interrupted' || e.error === 'canceled'))) return; fail(); };
+    function fail() {
+      if (fired || failed || my !== tok) return;
+      failed = true; clearInterval(pollT);
+      stopSpeech();
+      if (++ttsFails >= 2) { ttsBroken = true; toast(tr('ttsFail')); updateUI(); }
+      silent();
+    }
+    // Engines that never fire onstart: after 5 s, treat "actually speaking" as started. Engines that never fire onend: watch for speech to stop.
+    st = setTimeout(function () { if (!began) { if (synth.speaking === true) began = true; else fail(); } }, 5000);
+    var quiet = 0, pollT = setInterval(function () {
+      if (fired || my !== tok) { clearInterval(pollT); return; }
+      if (began && synth.speaking === false) { if (++quiet >= 2) { clearInterval(pollT); ttsFails = 0; fin(); } } else quiet = 0;
+    }, 400);
+    wd = setTimeout(fin, dur * 2.5 + 6000);
+    keep = u; // keep a reference so garbage collection cannot drop onend
+    try { synth.speak(u); } catch (e) { fail(); }
+  }
+
+  /* ---------- display ---------- */
+  function showSlide(i, full) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach(function (s, k) { s.classList.toggle('active', k === cur); s.setAttribute('aria-hidden', k === cur ? 'false' : 'true'); });
+    var sl = slides[cur]; sl.classList.add('jump'); // when switching slides, set the reveal state without animating
+    $$('.speaking', stage).forEach(function (e) { e.classList.remove('speaking'); });
+    timeline[cur].forEach(function (c) { if (c.reveal) c.el.classList.toggle('pending', !full); });
+    void sl.offsetWidth; sl.classList.remove('jump');
+    cueIdx = 0; partIdx = 0; mid = false; setCaption('');
+    try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) {}
+    updateUI();
+  }
+  function setCaption(t) { capText.textContent = t || ''; capEl.classList.toggle('show', !!t && capsOn); }
+  function wait(ms, my, fn) { setTimeout(function () { if (my === tok && playing) fn(); }, ms); }
+
+  function step() {
+    if (!playing) return;
+    var my = ++tok, T = timeline[cur];
+    if (cueIdx >= T.length) {
+      setCaption(''); updateProgress(1);
+      wait(900 / rate, my, function () {
+        if (cur < slides.length - 1) { showSlide(cur + 1, false); mid = true; wait(550, my, step); }
+        else finish();
+      });
+      return;
+    }
+    var c = T[cueIdx], p = c.parts[partIdx];
+    mid = true;
+    if (c.reveal) c.el.classList.remove('pending');
+    c.el.classList.add('speaking');
+    setCaption(p.cap); updateProgress();
+    speak(p.say, my, function () {
+      partIdx++;
+      if (partIdx >= c.parts.length) { partIdx = 0; cueIdx++; c.el.classList.remove('speaking'); }
+      wait(250 / rate, my, step);
+    });
+  }
+  function play(silentMode) {
+    if (silentMode) { muted = true; store.set('muted', '1'); }
+    unlock();
+    if (ended) { ended = false; showSlide(0, false); }
+    else if (!mid) showSlide(cur, false);
+    playing = true; everPlayed = true; startEl.hidden = true;
+    var my = ++tok; stopSpeech(); updateUI(); poke();
+    wait(mid && (cueIdx || partIdx) ? 120 : 500, my, step);
+    mid = true;
+  }
+  function pause() { playing = false; tok++; stopSpeech(); updateUI(); }
+  function toggle() { playing ? pause() : play(); }
+  function finish() {
+    playing = false; ended = true; mid = false; tok++; setCaption('');
+    $('#start-meta').textContent = tr('replay');
+    startEl.hidden = false; updateUI();
+  }
+  function go(i) {
+    if (i < 0 || i >= slides.length) return;
+    tok++; stopSpeech(); ended = false;
+    if (playing) { showSlide(i, false); mid = true; var my = ++tok; wait(500, my, step); }
+    else { showSlide(i, true); startEl.hidden = true; }
+    poke();
+  }
+  function restartPart() { if (!playing) return; var my = ++tok; stopSpeech(); wait(120, my, step); }
+
+  /* ---------- UI ---------- */
+  var bar = $('#bar'), fills = [];
+  slides.forEach(function (s, i) {
+    var b = document.createElement('button'); b.type = 'button'; b.style.flexGrow = Math.max(1, Math.round(slideDur[i] / 1000));
+    b.setAttribute('aria-label', tr('goto').replace('{n}', i + 1)); b.title = s.getAttribute('aria-label');
+    b.innerHTML = '<span><i></i></span>'; b.addEventListener('click', function () { go(i); });
+    bar.appendChild(b); fills.push($('i', b));
+  });
+  function updateProgress(force) {
+    var T = timeline[cur], done = 0;
+    for (var k = 0; k < cueIdx && k < T.length; k++) done += T[k].dur;
+    if (T[cueIdx]) for (var j = 0; j < partIdx; j++) done += T[cueIdx].parts[j].dur;
+    var frac = force != null ? force : (mid ? done / Math.max(1, slideDur[cur]) : 1);
+    fills.forEach(function (f, k) { f.style.width = (k < cur ? 100 : k > cur ? 0 : Math.round(frac * 100)) + '%'; });
+  }
+  var PLAY = 'M6 3.5v17L21 12z', PAUSE = 'M6 4h4v16H6zM14 4h4v16h-4z';
+  function updateUI() {
+    player.classList.toggle('playing', playing);
+    $('#i-play').setAttribute('d', playing ? PAUSE : PLAY);
+    $('#b-play').setAttribute('aria-label', tr(playing ? 'pause' : 'play'));
+    $('#count').textContent = (cur + 1) + ' / ' + slides.length;
+    $('#b-rate').textContent = rate + 'x';
+    $('#b-mute').classList.toggle('off', muted || ((!hasClips || audioBroken) && (ttsBroken || !synth || (noVoiceToast && !voice))));
+    $('#b-cc').classList.toggle('off', !capsOn);
+    updateProgress();
+    if (!playing) player.classList.add('ui');
+  }
+  var uiTimer = 0, canHover = !!(window.matchMedia && window.matchMedia('(hover: hover)').matches);
+  function poke() {
+    player.classList.add('ui'); clearTimeout(uiTimer);
+    uiTimer = setTimeout(function () {
+      if (!playing) return;
+      if (canHover && $('#controls').matches(':hover')) { poke(); return; }
+      player.classList.remove('ui');
+    }, 2600);
+  }
+  var toastTimer = 0;
+  function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 3500); }
+  function fmt(ms) { var s = Math.round(ms / 1000); return s < 60 ? tr('aboutSec').replace('{n}', s) : tr('aboutMin').replace('{n}', Math.max(1, Math.round(s / 60))); }
+
+  function setMuted(m) { muted = m; store.set('muted', m ? '1' : '0'); if (!m) { ttsBroken = false; audioBroken = false; ttsFails = 0; unlocked = false; unlock(); } updateUI(); restartPart(); }
+  function setCaps(c) { capsOn = c; store.set('caps', c ? '1' : '0'); capEl.classList.toggle('show', !!capText.textContent && capsOn); updateUI(); }
+  function cycleRate(d) { rate = RATES[(RATES.indexOf(rate) + (d || 1) + RATES.length) % RATES.length]; store.set('rate', String(rate)); updateUI(); restartPart(); }
+  var fsEnabled = !!(player.requestFullscreen || player.webkitRequestFullscreen);
+  function fullscreen() {
+    var el = document.fullscreenElement || document.webkitFullscreenElement;
+    if (el) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else if (fsEnabled) { var r = (player.requestFullscreen || player.webkitRequestFullscreen).call(player); if (r && r.catch) r.catch(function () {}); }
+  }
+  if (!fsEnabled) $('#b-full').style.display = 'none';
+
+  /* ---------- slide overview ---------- */
+  var ovEl = $('#overview'), ovGrid = $('#ov-grid'), ovResume = false;
+  function ovScale() { $$('.ov-item', ovGrid).forEach(function (b) { $('.ov-frame', b).style.transform = 'scale(' + (b.clientWidth / W) + ')'; }); }
+  function openOverview() {
+    if (!ovEl.hidden) return;
+    ovResume = playing; if (playing) pause();
+    ovGrid.innerHTML = '';
+    slides.forEach(function (s, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'ov-item' + (i === cur ? ' current' : '');
+      b.setAttribute('aria-label', s.getAttribute('aria-label'));
+      var f = document.createElement('div'); f.className = 'ov-frame'; f.setAttribute('aria-hidden', 'true');
+      var c = s.cloneNode(true); c.classList.add('active'); c.removeAttribute('aria-label'); c.removeAttribute('role');
+      $$('.pending, .speaking', c).forEach(function (e) { e.classList.remove('pending', 'speaking'); });
+      $$('[id]', c).forEach(function (e) { e.removeAttribute('id'); });
+      f.appendChild(c); b.appendChild(f);
+      var n = document.createElement('span'); n.className = 'ov-num'; n.textContent = i + 1; b.appendChild(n);
+      b.addEventListener('click', function () { var r = ovResume; closeOverview(true); go(i); if (r) play(); });
+      ovGrid.appendChild(b);
+    });
+    ovEl.hidden = false; stage.inert = true; $('#controls').inert = true; ovScale();
+    var curBtn = $('.ov-item.current', ovGrid); if (curBtn) { curBtn.scrollIntoView({ block: 'center' }); curBtn.focus({ preventScroll: true }); }
+  }
+  function closeOverview(silent) {
+    if (ovEl.hidden) return;
+    ovEl.hidden = true; stage.inert = false; $('#controls').inert = false; ovGrid.innerHTML = '';
+    if (!silent && ovResume) play();
+    ovResume = false;
+  }
+  $('#b-grid').onclick = function () { ovEl.hidden ? openOverview() : closeOverview(); };
+  $('#ov-close').onclick = function () { closeOverview(); };
+  window.addEventListener('resize', function () { if (!ovEl.hidden) ovScale(); });
+
+  $('#b-prev').onclick = function () { go(cur - 1); };
+  $('#b-next').onclick = function () { go(cur + 1); };
+  $('#b-play').onclick = toggle;
+  $('#b-rate').onclick = function () { cycleRate(1); };
+  function toggleMute() { var off = muted || (ttsBroken && !(hasClips && !audioBroken)); setMuted(!off); }
+  $('#b-mute').onclick = toggleMute;
+  $('#b-cc').onclick = function () { setCaps(!capsOn); };
+  $('#b-full').onclick = fullscreen;
+  $('#controls').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); });
+  $('#start-play').onclick = function (e) { e.stopPropagation(); if (qs.has('mute')) play(true); else { if (muted && !everPlayed) { muted = false; store.set('muted', '0'); } play(); } };
+  $('#start-silent').onclick = function (e) { e.stopPropagation(); play(true); };
+  startEl.addEventListener('click', function () { $('#start-play').onclick({ stopPropagation: function () {} }); });
+
+  var swiped = false, tx = 0, ty = 0, multi = false;
+  stage.addEventListener('click', function (e) {
+    if (swiped) { swiped = false; return; }
+    if (e.target.closest('a,button,input,select,textarea,summary,video,audio,[data-noplay]')) return;
+    toggle();
+  });
+  player.addEventListener('touchstart', function (e) { if (e.touches.length > 1) multi = true; else { multi = false; tx = e.touches[0].clientX; ty = e.touches[0].clientY; } swiped = false; poke(); }, { passive: true });
+  player.addEventListener('touchend', function (e) {
+    var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+    var zoomed = window.visualViewport && window.visualViewport.scale > 1.01;
+    if (multi || zoomed) { if (!e.touches.length) multi = false; swiped = multi || zoomed; setTimeout(function () { swiped = false; }, 400); return; }
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('#controls') && ovEl.hidden) { swiped = true; go(cur + (dx < 0 ? 1 : -1)); setTimeout(function () { swiped = false; }, 400); }
+  }, { passive: true });
+  player.addEventListener('mousemove', poke);
+  document.addEventListener('keydown', function (e) {
+    if (e.target.closest && e.target.closest('input,select,textarea')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key, hit = true;
+    if (!ovEl.hidden) { if (k === 'Escape' || k === 'g' || k === 'G') { closeOverview(); e.preventDefault(); } return; }
+    if (k === 'g' || k === 'G') { openOverview(); e.preventDefault(); return; }
+    if (k === ' ' || k === 'k' || k === 'K') { if (e.target.closest && e.target.closest('button')) return; toggle(); }
+    else if (k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === 'n' || k === 'N') { if (k === 'Enter' && e.target.closest && e.target.closest('button')) return; go(cur + 1); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace' || k === 'p' || k === 'P') go(cur - 1);
+    else if (k === 'Home') go(0);
+    else if (k === 'End') go(slides.length - 1);
+    else if (k === 'f' || k === 'F') fullscreen();
+    else if (k === 'c' || k === 'C') setCaps(!capsOn);
+    else if (k === 'm' || k === 'M') toggleMute();
+    else if (k === '>' || k === '.') cycleRate(1);
+    else if (k === '<' || k === ',') cycleRate(-1);
+    else hit = false;
+    if (hit) { e.preventDefault(); poke(); }
+  });
+  window.addEventListener('pagehide', stopSpeech);
+  document.addEventListener('visibilitychange', function () { if (document.hidden && playing) pause(); });
+
+  /* ---------- layout ---------- */
+  function fit() {
+    var vw = player.clientWidth, vh = player.clientHeight;
+    var s = Math.min(vw / W, vh / H), sw = W * s, sh = H * s, spare = vh - sh;
+    var below = spare >= 150; // portrait screens: captions go below the slide
+    var top = below ? Math.max(0, (spare - 130) / 2) : spare / 2;
+    stage.style.transform = 'translate(' + ((vw - sw) / 2) + 'px,' + top + 'px) scale(' + s + ')';
+    stage.style.setProperty('--lift', below ? '0px' : (-Math.max(0, 92 - (vh - top - sh)) / s) + 'px');
+    capEl.classList.toggle('overlay', !below);
+    if (below) { capEl.style.top = (top + sh + 12) + 'px'; capEl.style.bottom = 'auto'; capEl.style.fontSize = Math.max(15, Math.min(20, vw / 22)) + 'px'; }
+    else { capEl.style.top = 'auto'; capEl.style.bottom = (vh - top - sh + 16 * s) + 'px'; capEl.style.fontSize = Math.max(13, 27 * s) + 'px'; }
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', function () { setTimeout(fit, 200); });
+  fit();
+
+  /* ---------- check mode (?check=1), read by scripts/check.py ---------- */
+  function runCheck() {
+    var rep = { slides: slides.length, totalSec: Math.round(totalDur / 1000), issues: [], texts: [], clips: Object.keys(clips).length };
+    timeline.forEach(function (T) { T.forEach(function (c) { c.parts.forEach(function (p) { if (rep.texts.indexOf(p.say) < 0) rep.texts.push(p.say); }); }); });
+    rep.stats = [];
+    if (hasClips) { var miss = rep.texts.filter(function (t) { return !clips[t]; }); if (miss.length) rep.issues.push({ slide: 0, type: 'voice-stale', msg: miss.length + ' sentence(s) have no embedded audio (rerun add_voice.py after changing the narration): ' + miss[0].slice(0, 30) }); }
+    function add(i, type, msg) { rep.issues.push({ slide: i + 1, type: type, msg: msg }); }
+    function desc(el) { return '<' + el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : '') + '> "' + clean(el.textContent).slice(0, 24) + '"'; }
+    slides.forEach(function (s, i) {
+      showSlide(i, true);
+      var sr = s.getBoundingClientRect(), sc = sr.width / W, bad = [];
+      var dense = s.classList.contains('dense'), minFont = dense ? 14 : 22;
+      $$('*', s).forEach(function (el) {
+        if (el.closest('.voice') || el.closest('[data-bleed]')) return;
+        var r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+        var x0 = (r.left - sr.left) / sc, y0 = (r.top - sr.top) / sc, x1 = (r.right - sr.left) / sc, y1 = (r.bottom - sr.top) / sc;
+        var over = x0 < -1 || y0 < -1 || x1 > W + 1 || y1 > H - CAPTION_BAND + 1;
+        var clip = !el.ownerSVGElement && el.tagName.toLowerCase() !== 'svg' && el.clientWidth > 0 && (el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2);
+        if ((over || clip) && !bad.some(function (b) { return b.contains(el); })) {
+          bad.push(el);
+          add(i, 'overflow', desc(el) + (over ? ' extends outside the slide area (element: left ' + Math.round(x0) + ', top ' + Math.round(y0) + ', right ' + Math.round(x1) + ', bottom ' + Math.round(y1) + '; allowed: left 0, top 0, right ' + W + ', bottom ' + (H - CAPTION_BAND) + ')' : ' has content spilling out of its box (a long word or URL that cannot wrap, or not enough height)'));
+        }
+        var hasText = Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.trim(); });
+        var fs = parseFloat(getComputedStyle(el).fontSize);
+        if (el.ownerSVGElement && el.getScreenCTM) { var m = el.getScreenCTM(); if (m) fs = fs * Math.sqrt(m.a * m.a + m.b * m.b) / sc; } // for SVG text, account for the viewBox scale
+        if (hasText && fs < minFont - 0.5) add(i, 'small-text', desc(el) + ' renders at ' + Math.round(fs) + 'px (the minimum is ' + (dense ? '14px on dense slides' : '22px') + ')');
+      });
+      var T = timeline[i];
+      if (!T.length) add(i, 'no-narration', 'This slide has nothing to narrate');
+      else if (T[0].fallback) add(i, 'no-narration', 'No data-say or .voice on this slide, so the on-screen text would be read out as it is');
+      T.forEach(function (c) { c.parts.forEach(function (p) { var sym = p.say.match(/[→←↑↓⇒／※＊*#<>＝=~〜]/); if (sym) add(i, 'symbol', 'The narration contains the symbol "' + sym[0] + '": ' + p.say.slice(0, 30)); var w = Math.ceil(Array.from(p.cap).reduce(function (a, ch) { return a + (ch.charCodeAt(0) > 0x7f ? 1 : 0.5); }, 0)); if (w > 48) add(i, 'long-caption', 'A caption is too long (' + w + ' full-width characters; the limit is 48, and Latin letters count as half): ' + p.cap.slice(0, 30) + '…'); }); });
+      var kids = Array.prototype.filter.call(s.children, function (e) { return !e.classList.contains('voice') && !e.classList.contains('slide-footer') && e.getBoundingClientRect().height > 0; });
+      var top = Infinity, bottom = 0, chars = 0;
+      kids.forEach(function (e) { var r = e.getBoundingClientRect(); top = Math.min(top, (r.top - sr.top) / sc); bottom = Math.max(bottom, (r.bottom - sr.top) / sc); chars += clean(e.textContent).length; });
+      var fill = kids.length ? Math.round((bottom - top) / 548 * 100) : 0; // 548 = height available for content
+      rep.stats.push({ dense: dense, sec: Math.round(slideDur[i] / 1000), sentences: T.reduce(function (a, c) { return a + c.parts.length; }, 0), fill: fill, chars: chars });
+      if (slideDur[i] > 60000) add(i, 'long-slide', 'The narration on this slide runs about ' + Math.round(slideDur[i] / 1000) + ' s (keep each slide under 60 s)');
+    });
+    var pre = document.createElement('pre'); pre.id = 'check-report'; pre.textContent = JSON.stringify(rep, null, 1);
+    player.appendChild(pre);
+  }
+
+  /* ---------- start-up ---------- */
+  $('#start-title').textContent = document.title;
+  $('#start-meta').textContent = tr('meta').replace('{n}', slides.length).replace('{t}', fmt(totalDur));
+  var h = parseInt((location.hash || '').replace('#', ''), 10);
+  showSlide(h > 0 ? h - 1 : 0, true);
+  if (STILL) startEl.hidden = true;
+  if (qs.has('capdemo')) { // for the phone screenshots taken by check.py: reveal everything and show the longest caption of this slide
+    root.classList.add('no-anim', 'capdemo'); startEl.hidden = true;
+    var longest = ''; timeline[cur].forEach(function (c) { c.parts.forEach(function (p) { if (p.cap.length > longest.length) longest = p.cap; }); });
+    setCaption(longest); capEl.classList.add('show');
+  }
+  if (CHECK) { startEl.hidden = true; if (document.readyState === 'complete') runCheck(); else window.addEventListener('load', runCheck); }
+  else if (qs.has('overview')) { startEl.hidden = true; openOverview(); }
+  else if (qs.has('autoplay')) play(qs.has('mute'));
+  window.addEventListener('hashchange', function () { var n = parseInt(location.hash.replace('#', ''), 10); if (n > 0 && n - 1 !== cur) go(n - 1); });
+})();
+</script>
+</body>
+</html>
