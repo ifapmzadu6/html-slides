@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "html-slides",
+  "owner": {
+    "name": "ifapmzadu6",
+    "url": "https://github.com/ifapmzadu6"
+  },
+  "description": "html-slides: narrated, video-style HTML slide decks, packaged as an agent skill.",
+  "plugins": [
+    {
+      "name": "html-slides",
+      "source": "./",
+      "description": "Build narrated, video-style slide decks as a single HTML file: the browser reads the narration aloud, elements appear as they are spoken, captions are shown, and the deck advances by itself. Works offline, on phones, and prints to PDF.",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": [
+        "presentation",
+        "slides",
+        "narration",
+        "html"
+      ]
+    }
+  ]
+}

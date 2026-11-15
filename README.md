@@ -29,18 +29,32 @@ Open one of the built samples in a browser and press play:
 
 ## Install
 
-Copy the skill folder to where your agent looks for skills. For Claude Code:
+As a Claude Code plugin (Claude Code 2.1.275 or later):
+
+```
+/plugin install html-slides --marketplace ifapmzadu6/html-slides
+```
+
+On older versions, add the marketplace first, then install:
+
+```
+/plugin marketplace add ifapmzadu6/html-slides
+/plugin install html-slides@html-slides
+```
+
+Or copy the skill folder to where your agent looks for skills. For Claude Code:
 
 ```sh
 git clone https://github.com/ifapmzadu6/html-slides
-cp -R html-slides/skills/html-slides ~/.claude/skills/html-slides       # for every project
-# or
-cp -R html-slides/skills/html-slides your-project/.claude/skills/html-slides   # for one project
+cp -R html-slides/skills/html-slides ~/.claude/skills/html-slides              # for every project
+cp -R html-slides/skills/html-slides your-project/.claude/skills/html-slides   # or for one project
 ```
 
 Then ask for a deck, for example: *"Make a narrated slide deck that explains our expense-claim process to new staff, about 7 slides."*
 
 Requirements: Python 3.8 or later. The rendered check and the screenshots also need Chrome, Edge or Chromium; without one, the source lint still runs.
+
+The player's own labels (buttons, start screen, notices) are in English. To localise them, add a block to `TEXT` in `assets/template.html`.
 
 ## How it works
 

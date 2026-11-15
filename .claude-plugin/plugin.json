@@ -1,0 +1,23 @@
+{
+  "name": "html-slides",
+  "description": "Build narrated, video-style slide decks as a single HTML file: the browser reads the narration aloud, elements appear as they are spoken, captions are shown, and the deck advances by itself. Works offline, on phones, and prints to PDF.",
+  "version": "1.0.0",
+  "author": {
+    "name": "ifapmzadu6",
+    "url": "https://github.com/ifapmzadu6"
+  },
+  "homepage": "https://github.com/ifapmzadu6/html-slides",
+  "repository": "https://github.com/ifapmzadu6/html-slides",
+  "license": "MIT",
+  "keywords": [
+    "presentation",
+    "slides",
+    "deck",
+    "narration",
+    "text-to-speech",
+    "captions",
+    "html",
+    "offline",
+    "japanese"
+  ]
+}

@@ -68,7 +68,7 @@ SELFTEST_JS = r"""
     ok('start: slide 1, start screen shown, not playing', cur() === 1 && !$('#start').hidden && !playing());
     ok('start: every element is revealed', pend() === 0);
     ok('start: only the current slide is visible', all().filter(s => getComputedStyle(s).visibility === 'visible').length === 1);
-    ok('start: controls are labelled in the deck language', $('#b-grid').getAttribute('aria-label') === 'スライド一覧' && $('#start-silent').textContent.length > 0, $('#b-grid').getAttribute('aria-label'));
+    ok('start: controls are labelled', $('#b-grid').getAttribute('aria-label') === 'All slides' && $('#start-silent').textContent.indexOf('captions only') > 0, $('#b-grid').getAttribute('aria-label'));
 
     key('ArrowRight'); ok('right arrow while stopped: slide 2, start screen gone, all revealed', cur() === 2 && $('#start').hidden && pend() === 0);
     key('ArrowLeft'); ok('left arrow while stopped: back to slide 1', cur() === 1);
@@ -362,7 +362,7 @@ def main():
 
     en = HEAD.replace("-->", "lang: en\n-->") + '<section class="slide title"><h1 data-say="This is a short English deck.">English</h1></section>\n<section class="slide"><h2 data-say="It has two slides.">Two</h2></section>'
     r = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", built(tmp, "en.html", en).as_uri()])
-    ok("UI text: an English deck gets English labels", 'aria-label="All slides"' in r.stdout and "Play without sound" in r.stdout and "2 slides" in r.stdout)
+    ok("UI text: labels, start screen and slide count are filled in", 'aria-label="All slides"' in r.stdout and "Play without sound" in r.stdout and "2 slides" in r.stdout)
 
     # --- 8. narration with a fake speech engine ---
     mocked = deck.read_text(encoding="utf-8").replace('<div id="player">', TTS_MOCK_JS + '<div id="player">', 1).replace("</body>", TTS_TEST_JS + "</body>")
@@ -396,7 +396,7 @@ def main():
         log = o.get("log") or {"spoken": []}
         ok("dead engine: reaches the last slide", o.get("ended"), "slide %s" % o.get("slide"))
         ok("dead engine: after two failed sentences it stops trying and plays captions only", len(log["spoken"]) == 2, "tried to speak %d times" % len(log["spoken"]))
-        ok("dead engine: tells the viewer it switched to captions only", "字幕のみ" in (o.get("toastSeen") or ""), o.get("toastSeen"))
+        ok("dead engine: tells the viewer it switched to captions only", "captions only" in (o.get("toastSeen") or ""), o.get("toastSeen"))
 
     # --- 10. TLA+ model checking (only when tla2tools.jar is available) ---
     jar = os.environ.get("TLA_JAR") or str(ROOT / "tests" / "tla" / "tla2tools.jar")
