@@ -107,6 +107,14 @@ If you want a consistent voice, `add_voice.py` can generate audio on your own co
 
 Qwen3 uses the source’s `lang` setting for pronunciation and `--speaker` for the voice. For example, `lang: en-GB` selects English synthesis. Changing the synthesis language regenerates the embedded clips the next time you run `add_voice.py`.
 
+If a sentence has an unwanted sound after its final word, you can shorten that embedded clip. Supply the exact narration sentence and the time in seconds from the start of the clip:
+
+```sh
+python skills/html-slides/scripts/add_voice.py deck.html --trim-clip "気温は−5℃です。" 2.44
+```
+
+Choose the time by checking the individual clip. The edit applies everywhere that sentence is reused. The corrected clip is stored as PCM WAV. Trimming MP3 or M4A inputs requires ffmpeg.
+
 ### Windows (PowerShell)
 
 Use 64-bit Python 3.12 and Edge or Chrome. From the repository directory, build a deck and open it:

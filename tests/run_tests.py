@@ -23,6 +23,7 @@ What is covered:
 
 The sample decks and several fixtures are Japanese because the skill is used mostly for Japanese decks.
 """
+import base64
 import html
 import json
 import os
@@ -562,6 +563,29 @@ def main():
         original = language_deck.read_bytes()
         ok("qwen3: reports an unsupported deck language before synthesis",
            add_voice.main() == 2 and generate.call_count == 2 and language_deck.read_bytes() == original)
+
+    trim_deck = tmp / "reviewed.html"
+    build.assemble(meta, "", COVER, trim_deck)
+    original_markup = trim_deck.read_text(encoding="utf-8")
+    def wav_uri(samples):
+        return "data:audio/wav;base64," + base64.b64encode(add_voice.pcm_to_wav(samples, 1000)).decode("ascii")
+
+    samples = [0.0, 0.1, 0.2, 0.3] * 100
+    uri = wav_uri(samples)
+    voice_data = {"voice": "test", "speed": 1, "clips": {"Hello.": uri, "Other.": uri}}
+    add_voice.save_voice_data(trim_deck, original_markup, voice_data)
+    before = trim_deck.read_bytes()
+    for sentence, end in (("missing", "0.2"), ("Hello.", "nan"), ("Hello.", "0.5"), ("Hello.", "0")):
+        with patch.object(sys, "argv", ["add_voice.py", str(trim_deck), "--trim-clip", sentence, end]):
+            ok("trim: rejects %s %s without changing the deck" % (sentence, end),
+               add_voice.main() == 2 and trim_deck.read_bytes() == before)
+    with patch.object(sys, "argv", ["add_voice.py", str(trim_deck), "--trim-clip", "Hello.", "0.2"]):
+        ok("trim: edits an embedded clip without a speech engine", add_voice.main() == 0)
+    reviewed = trim_deck.read_text(encoding="utf-8")
+    actual = json.loads(re.search(r'id="voice-data">(.*?)</script>', reviewed, re.S)[1])
+    voice_data["clips"]["Hello."] = wav_uri(samples[:200])
+    ok("trim: preserves exact PCM frames, all other clips and cache settings", actual == voice_data)
+    ok("trim: preserves the player and slides", add_voice.BLOCK.sub("", reviewed) == original_markup)
 
     class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):

@@ -30,6 +30,7 @@ import html
 import importlib.util
 import io
 import json
+import math
 import pathlib
 import platform
 import re
@@ -637,6 +638,53 @@ def compress(raw, ext, tmp):
     raise SystemExit("ERROR: the audio could not be converted. Install ffmpeg.")
 
 
+def trim_clip(uri, seconds):
+    """Keep the original PCM frames up to the reviewed end time."""
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("the end time must be a positive number of seconds")
+    header, _, encoded = uri.partition(",")
+    if header not in ("data:audio/wav;base64", "data:audio/mpeg;base64", "data:audio/mp4;base64"):
+        raise ValueError("unsupported embedded audio format")
+    raw = base64.b64decode(encoded, validate=True)
+    if header != "data:audio/wav;base64":
+        if not shutil.which("ffmpeg"):
+            raise ValueError("install ffmpeg to trim MP3 or M4A clips")
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp) / ("clip.mp3" if "mpeg" in header else "clip.m4a")
+            source.write_bytes(raw)
+            decoded = pathlib.Path(tmp) / "decoded.wav"
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(source), "-c:a", "pcm_s16le", str(decoded)],
+                           check=True, capture_output=True)
+            raw = decoded.read_bytes()
+    with wave.open(io.BytesIO(raw), "rb") as audio:
+        if seconds >= audio.getnframes() / audio.getframerate():
+            raise ValueError("the end time must be inside the clip")
+        frames = round(seconds * audio.getframerate())
+        if not 0 < frames < audio.getnframes():
+            raise ValueError("the end time must leave at least one frame on each side")
+        kept = audio.readframes(frames)
+        if len(kept) != frames * audio.getnchannels() * audio.getsampwidth():
+            raise ValueError("incomplete audio clip")
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as out:
+            out.setparams(audio.getparams())
+            out.writeframes(kept)
+    return "data:audio/wav;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def save_voice_data(deck, src, voice_data):
+    data = json.dumps(voice_data, ensure_ascii=False).replace("</", "<\\/")
+    block = '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">%s</script>\n<!-- VOICE:END -->\n' % data
+    with tempfile.NamedTemporaryFile(dir=deck.parent, delete=False) as staged:
+        path = pathlib.Path(staged.name)
+    try:
+        path.write_text(src.replace(ENGINE, block + ENGINE, 1), encoding="utf-8")
+        shutil.copymode(deck, path)
+        path.replace(deck)
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def main():
     setup_console()
     ap = argparse.ArgumentParser()
@@ -648,8 +696,11 @@ def main():
     ap.add_argument("--instruct", default=QWEN3_DEFAULT_INSTRUCT, help="style/emotion instruction for qwen3 (empty string to disable)")
     ap.add_argument("--temperature", type=float, help="sampling temperature for qwen3 (lower is calmer)")
     ap.add_argument("--speed", type=float, default=1.0)
-    ap.add_argument("--list", action="store_true")
-    ap.add_argument("--remove", action="store_true")
+    action = ap.add_mutually_exclusive_group()
+    action.add_argument("--list", action="store_true")
+    action.add_argument("--remove", action="store_true")
+    action.add_argument("--trim-clip", nargs=2, metavar=("SENTENCE", "END_SECONDS"),
+                        help="keep the start of an embedded sentence clip up to END_SECONDS")
     a = ap.parse_args()
 
     deck = pathlib.Path(a.deck).resolve()
@@ -671,6 +722,21 @@ def main():
     if a.remove:
         deck.write_text(src, encoding="utf-8")
         print("Embedded audio removed.")
+        return 0
+
+    if a.trim_clip:
+        sentence, end = a.trim_clip
+        clips = old.get("clips") if isinstance(old, dict) else None
+        if not isinstance(clips, dict) or not isinstance(clips.get(sentence), str):
+            print("ERROR: no embedded clip matches that exact narration sentence.")
+            return 2
+        try:
+            clips[sentence] = trim_clip(clips[sentence], float(end))
+            save_voice_data(deck, src, old)
+        except (ValueError, EOFError, wave.Error, OSError, subprocess.CalledProcessError) as e:
+            print("ERROR: could not trim the clip: %s" % e)
+            return 2
+        print("Trimmed the clip to %s seconds: %s" % (end, sentence))
         return 0
 
     windows_qwen = platform.system() == "Windows"
@@ -842,9 +908,7 @@ def main():
             if n % 10 == 0:
                 print("  %d / %d" % (n, len(todo)))
 
-    data = json.dumps({"voice": key, "label": label, "speed": a.speed, "clips": {t: clips[t] for t in texts}}, ensure_ascii=False).replace("</", "<\\/")
-    block = '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">%s</script>\n<!-- VOICE:END -->\n' % data
-    deck.write_text(src.replace(ENGINE, block + ENGINE, 1), encoding="utf-8")
+    save_voice_data(deck, src, {"voice": key, "label": label, "speed": a.speed, "clips": {t: clips[t] for t in texts}})
     print("Audio embedded: %s (%.1f MB)" % (deck.name, deck.stat().st_size / 1e6))
     if engine == "voicevox":
         print("NOTE: VOICEVOX / AivisSpeech voices usually require a credit when the deck is published (for example \"VOICEVOX:%s\"). Check the terms of use of the voice you chose." % label.split("（")[0])
