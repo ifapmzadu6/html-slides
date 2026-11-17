@@ -513,6 +513,12 @@ def main():
     ok("add_voice: _prep_qwen3_text normalizes trailing commas and terminal punctuation", add_voice._prep_qwen3_text("テストです、") == "テストです。")
     ok("add_voice: _prep_qwen3_text normalizes numbers, decimals and symbols", add_voice._prep_qwen3_text("費用は4,800万円、平均二・三日、評価は◎") == "費用は4800万円、平均二てん三にち、評価は二重丸。")
     ok("add_voice: _prep_qwen3_text converts 5+ digit numbers to 万/億 and % to パーセント", add_voice._prep_qwen3_text("30,000円以上、使用率70%に達し") in ("3万円以上、使用率70パーセントにたっし。", "3万円以上、使用率70パーセントに達し。"))
+    for lang, phrase in (("chinese", "增长20%，温度为5℃。"), ("english", "A × B"), ("korean", "성장률 20%")):
+        ok("qwen3: preserves %s narration" % lang, add_voice._prep_qwen3_text(phrase, lang) == phrase)
+    for end, onset in ((1000, 1020), (1000, 1003), (1000, 1000), (1000, 980), (1000, 1500)):
+        cut = add_voice._min_energy_cut([0.1] * 2000, 1000, end / 1000, onset / 1000)
+        ok("qwen3: keeps cut between aligned boundaries %d and %d" % (end, onset),
+           min(end, onset) <= cut <= max(end, onset), cut)
     _, _, _, short_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><p class="kicker" data-say="こちらは、">K</p><h1 data-say="タイトルです。">T</h1></section>')
     ok("lint: warns on short narration fragment on .kicker", any(i["type"] == "short-sentence" for i in short_issues), short_issues)
     _, _, _, sym_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><h1 data-say="評価は◎です。">T</h1></section>')
