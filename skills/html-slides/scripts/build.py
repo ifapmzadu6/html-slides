@@ -49,6 +49,8 @@ import check  # noqa: E402
 TEMPLATE = HERE.parent / "assets" / "template.html"
 REGION = re.compile(r"(<!-- SLIDES:START[^\n]*-->\n).*?(<!-- SLIDES:END -->)", re.S)
 CUSTOM = re.compile(r'<style id="custom">\n?(.*?)\n?</style>\n', re.S)
+VOICE_BLOCK = re.compile(r"<!-- VOICE:START -->.*?<!-- VOICE:END -->\n?", re.S)
+ENGINE_MARKER = "<script>\n/* ===== ENGINE JS"
 HEADER = re.compile(r"\A\s*<!--(.*?)-->", re.S)
 
 THEMES = ["light", "dark", "corporate", "warm", "forest", "sakura", "mono", "pop", "neon", "chalk"]
@@ -177,6 +179,13 @@ class Lint(HTMLParser):
                          "Write data-say and data-caption with the same number of sentences in the same order (the same number of 。 marks).")
         if self.in_slide() and tag != "section" and ("data-say" in a or "voice" in cls):
             self.slides[-1]["cues"] += 1
+            say_val = (a.get("data-say") or "").strip()
+            sents = sentences(say_val) if say_val else []
+            if sents and "…" not in say_val:
+                c0 = re.sub(r"[、。！？!?.・,\s]", "", sents[0])
+                if ("kicker" in cls and say_val.endswith(("、", ","))) or (len(sents) > 1 and 0 < len(c0) <= 4):
+                    self.add("warn", "short-sentence", 'The narration starts with a very short fragment ("%s"), which flashes captions briefly and can destabilise TTS.' % sents[0],
+                             'Join short lead-in fragments with the main sentence (for example, write "一つ目は、…" with a comma instead of "一つ目。…", and put the opening sentence on <h1> rather than a separate data-say on .kicker).')
         m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", a.get("style") or "")
         floor = 14 if (self.deck_dense or (self.slides and "dense" in self.slides[-1]["cls"])) else 22
         if m and float(m.group(1)) < floor and not any(e["tag"] == "svg" for e in self.stack) and tag != "svg":
@@ -316,6 +325,13 @@ def assemble(meta, css, slides, out_path):
         fail("The template is damaged: " + str(TEMPLATE))
     if css:
         t = t.replace("</head>", '<style id="custom">\n%s\n</style>\n</head>' % css, 1)
+    if out_path.exists():
+        try:
+            vm = VOICE_BLOCK.search(out_path.read_text(encoding="utf-8"))
+            if vm and ENGINE_MARKER in t:
+                t = t.replace(ENGINE_MARKER, vm.group(0) + ENGINE_MARKER, 1)
+        except OSError:
+            pass
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(t, encoding="utf-8")
 
