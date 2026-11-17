@@ -340,6 +340,12 @@ def _ja_num_units(m):
     return "".join(parts)
 
 
+def _ja_decimal(m):
+    whole, fraction, day = m.groups()
+    integer = "ゼロ" if whole in ("0", "０") else whole
+    return integer + "てん" + "".join(JA_DIGITS[int(d)] for d in fraction) + ("にち" if day else "")
+
+
 def _prep_qwen3_text(s, lang="japanese"):
     if lang != "japanese":
         return s.strip()
@@ -347,6 +353,9 @@ def _prep_qwen3_text(s, lang="japanese"):
     s = re.sub(r"[、,]+\s*$", "", s.strip())
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
+    # Read each fractional digit, including zeros, even in a numeric-only cue.
+    s = re.sub(r"(?<![A-Za-z_\d.．])([0-9０-９]+)[.．]([0-9０-９]+)(?![A-Za-z_\d]|[.．]\d)(日)?",
+               _ja_decimal, s)
     if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", s):
         # A labeled identifier is a sequence of digits, including leading zeros.
         s = re.sub(r"(番号(?:は|が|：|:)?[ \t]*)([0-9０-９]+)(?![\dA-Za-z_.-])",
@@ -354,9 +363,8 @@ def _prep_qwen3_text(s, lang="japanese"):
         # Only quantities with explicit units should acquire 万 or 億.
         s = re.sub(r"(?<![A-Za-z_\d.])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
                    _ja_num_units, s)
-        # Convert Kanji/ASCII decimal points in Japanese sentences (e.g. 二・三日, 六・八万円, 2.3日) to 'てん'.
+        # Preserve the existing kanji decimal notation (e.g. 六・八万円).
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
-        s = re.sub(r"(?<![A-Za-z_\d.])(\d+)\.(\d+)(?![A-Za-z_\d]|\.\d)", r"\1てん\2", s)
         s = re.sub(r"てん([二三四五六七八九2-9])日", r"てん\1にち", s)
         s = re.sub(r"(?<![\w\d])[+＋](?=\d)", "プラス", s)
         s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
@@ -725,7 +733,7 @@ def main():
             print("ERROR: Qwen3 does not support deck language '%s'. Supported language codes: %s."
                   % (deck_lang, ", ".join(sorted(QWEN3_DECK_LANGS))))
             return 2
-        version = "v4" if lang in ("japanese", None) else "v3"
+        version = "v5" if lang in ("japanese", None) else "v3"
         key = "qwen3:%s:%s:%s:%s:%s:%s" % (version, lang or "infer", a.model, label, a.instruct or "",
                                               "" if a.temperature is None else a.temperature)
     else:
