@@ -322,7 +322,10 @@ def _ja_num_units(m):
     return "".join(parts)
 
 
-def _prep_qwen3_text(s):
+def _prep_qwen3_text(s, lang="japanese"):
+    if lang != "japanese":
+        return s.strip()
+
     s = re.sub(r"[、,]+\s*$", "", s.strip())
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
@@ -365,13 +368,14 @@ def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=
 
     if "model" not in cache:
         cache["model"] = load_model(model_id)
+    lang = qwen3_lang_code(voice, text)
     results = list(
         cache["model"].generate(
-            text=_prep_qwen3_text(text),
+            text=_prep_qwen3_text(text, lang),
             voice=voice,
             instruct=instruct or None,
             temperature=temperature,
-            lang_code=qwen3_lang_code(voice, text),
+            lang_code=lang,
             speed=speed,
         )
     )
@@ -404,15 +408,17 @@ def _norm_alnum(s):
 def _min_energy_cut(samples, sr, t_left, t_right):
     """Find the lowest-energy sample index after sentence end (t_left) and before next sentence start (t_right)."""
     win = max(1, int(sr * 0.01))
-    gap = t_right - t_left
-    # Search in the middle-to-late silence zone [t_left + 280ms, t_right - 100ms] so trailing devoiced syllables
-    # ('〜です', '〜ます', '〜ました') are kept intact while pre-sentence breaths before t_right are excluded.
-    start_t = t_left + min(0.28, max(0.05, gap * 0.50))
-    end_t = max(start_t + 0.02, t_right - min(0.10, max(0.02, gap * 0.22)))
-    a = max(0, int(start_t * sr))
-    b = min(len(samples) - win, int(end_t * sr))
-    if b <= a:
-        return max(0, min(len(samples), int(max(t_left, t_right - 0.04) * sr)))
+    left = max(0, min(len(samples), round(t_left * sr)))
+    right = max(0, min(len(samples), round(t_right * sr)))
+    gap = right - left
+    # Keep the entire energy window between the two aligned sentences. For
+    # adjacent or overlapping alignments, split the ambiguous interval evenly.
+    if gap < win:
+        return (left + right) // 2
+    a = left + min(round(0.28 * sr), gap // 2)
+    b = right - min(round(0.10 * sr), gap // 5) - win
+    if b < a:
+        a, b = left, right - win
     best_i, best_e = a, float("inf")
     step = max(1, win // 2)
     for idx in range(a, b + 1, step):
@@ -461,7 +467,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
     out = {}
     lang = qwen3_lang_code(voice, " ".join(texts))
     align_lang = QWEN3_ALIGNER_LANGS.get(lang, "Japanese")
-    sentinel = "いち、に、さん。" if lang == "japanese" else "One, two, three."
+    sentinel = {"japanese": "いち、に、さん。", "chinese": "一，二，三。", "korean": "하나, 둘, 셋."}.get(lang, "One, two, three.")
     for batch in batches:
         if cache["aligner"] is None:
             for t in batch:
@@ -469,7 +475,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
             continue
         # Join sentences with '\n' (while split_pattern='') and append a dummy sentinel sentence so Qwen3-TTS's final
         # codec EOS token never clips the trailing mora ('〜ます' / '〜ました') of the last sentence in the batch.
-        spoken_batch = [_prep_qwen3_text(s) for s in batch]
+        spoken_batch = [_prep_qwen3_text(s, lang) for s in batch]
         synth_spoken = spoken_batch + [sentinel]
         joined = "\n".join(synth_spoken)
         try:
@@ -500,12 +506,13 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
             for spoken_s in synth_spoken:
                 target = max(1, len(_norm_alnum(spoken_s)))
                 cur_len = 0
-                start_i = min(idx, len(items) - 1)
+                start_i = idx
                 while idx < len(items) and cur_len < target:
                     cur_len += len(_norm_alnum(items[idx].text))
                     idx += 1
-                end_i = max(start_i, min(idx - 1, len(items) - 1))
-                spans.append((items[start_i].start_time, items[end_i].end_time))
+                if cur_len < target:
+                    raise ValueError("incomplete sentence alignment")
+                spans.append((items[start_i].start_time, items[idx - 1].end_time))
             samples_list = audio.tolist()
             cuts = [0]
             for k in range(len(batch)):
@@ -686,7 +693,7 @@ def main():
                 print("  %-15s %s" % (vid, desc))
             return 0
         label = a.speaker or QWEN3_DEFAULT_VOICE
-        key = "qwen3:%s:%s:%s:%s" % (a.model, label, a.instruct or "", "" if a.temperature is None else a.temperature)
+        key = "qwen3:v2:%s:%s:%s:%s" % (a.model, label, a.instruct or "", "" if a.temperature is None else a.temperature)
     else:
         if shutil.which("say") is None:
             print("ERROR: the say engine exists only on macOS.")
