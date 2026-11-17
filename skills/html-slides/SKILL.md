@@ -66,8 +66,8 @@ If the user wants to compare, have them open `assets/themes.html`, a gallery of 
 <section class="slide">
   <h2 data-say="まず、特徴は三つです。">3つの特徴</h2>
   <ul>
-    <li data-say="一つ目。ブラウザが自動で読み上げます。"><strong>自動ナレーション</strong></li>
-    <li data-say="二つ目。話に合わせて要素が現れます。"><strong>話に合わせて出現</strong></li>
+    <li data-say="一つ目は、ブラウザが自動で読み上げることです。"><strong>自動ナレーション</strong></li>
+    <li data-say="二つ目は、話に合わせて要素が現れることです。"><strong>話に合わせて出現</strong></li>
   </ul>
   <p class="voice">補足です。この文は読み上げと字幕だけで、画面には出ません。</p>
 </section>
@@ -89,9 +89,10 @@ All layout classes (cover, section divider, cards, big number, flow, table, quot
 The narration is what makes the deck feel like a video. Reading the on-screen text aloud just produces "slides being read out", so put **short keywords on screen and full spoken sentences in the narration**.
 
 - Keep each sentence to about 40 full-width characters (about 80 Latin letters). Longer sentences make captions hard to read and sound unnatural; the check rejects captions over 48 full-width characters (Latin letters count as half).
+- **Avoid tiny 2–6 character narration fragments.** Do not put a short lead-in like `data-say="この動画では、"` or `data-say="こちらは、"` on a `.kicker` element (leave `.kicker` without `data-say` and start the full sentence on `<h1>`), and do not split list items with a period after the number (`一つ目。…`); write each bullet as one sentence with a comma (`一つ目は、…`, `二つ目は、…`). Tiny fragments make captions flash for less than a second and make neural TTS unstable.
 - Use connectives ("first", "next", "in other words"; まず, 次に, つまり) so that slides flow into each other.
 - Aim for 10-30 seconds per slide. The number of sentences does not matter, and a section divider can have one. Consider splitting a slide over 45 seconds; always split one over 60.
-- **When the speech engine is likely to misread a word, write the narration phonetically and give the correct spelling in `data-caption`.** In Japanese this applies to Latin abbreviations (API, DX), in-house terms and proper nouns, kanji with more than one reading (方, 行った), and long numbers or amounts (1,200円). Short numbers such as 3つ, 11時 or 5人 can be written as they are.
+- **When the speech engine is likely to misread a word, write the narration phonetically and give the correct spelling in `data-caption`.** In Japanese this applies to Latin abbreviations (API, DX, HTML, GPU), in-house terms and proper nouns, kanji compounds or words with ambiguous readings (方, 行った, 左右 → さゆう, 上下 → じょうげ, 話者 → わしゃ / 日本語の声), and long numbers or amounts (1,200円). Short numbers such as 3つ, 11時 or 5人 can be written as they are.
   ```html
   <h2 data-say="エーピーアイの利用料は、月額せんにひゃく円です。"
       data-caption="APIの利用料は、月額1,200円です。">料金</h2>
@@ -118,7 +119,7 @@ A slide is a fixed 1280×720px canvas that is scaled as a whole to fit the scree
 - **Never edit `assets/template.html`.** To change the look, pick another theme or put a `style` attribute on an element. For an adjustment used in several places, write a `<style> … </style>` block in the source; it is included as custom CSS (see "Changing colours" in `references/layouts.md`).
 - **Narration uses the browser's built-in speech (Web Speech API). Do not generate audio files.** The voice is whichever one the viewer's device has, so its quality varies by device. That trade-off is intentional: the deck stays one small file and needs no service.
 - **Never send the narration text to an outside service.** Do not use cloud text-to-speech (vendor TTS APIs, edge-tts, gTTS, and the like). The player follows the same rule: it uses only voices the browser reports as on-device and never the online voices that send text to a server, so on a device with no such voice (some Android phones) the deck plays with captions only. It also opts out of the browser's automatic page translation.
-- Only when the user explicitly asks for a better voice, point them to `scripts/add_voice.py`, which generates audio locally with VOICEVOX / AivisSpeech, Kokoro-82M (`--engine kokoro`, via a local Kokoro-FastAPI server or Python `kokoro` package), or Qwen3-TTS (`--engine qwen3`, via `mlx-audio` on Apple Silicon) and embeds it in the HTML; its usage is at the top of the script. Do not run it or install `kokoro` / `mlx-audio` unasked — if not installed yet, ask the user before setting up a virtual environment (e.g. `.venv` with Python 3.10–3.12, `kokoro>=0.9.4`, `misaki[ja]`, `python -m unidic download` for Kokoro Japanese, or `mlx-audio` for Qwen3-TTS) and downloading the model. Rebuilding removes embedded audio, so run it again after every build.
+- Only when the user explicitly asks for a better voice, point them to `scripts/add_voice.py`, which generates audio locally with VOICEVOX / AivisSpeech, Kokoro-82M (`--engine kokoro`, via a local Kokoro-FastAPI server or Python `kokoro` package), or Qwen3-TTS (`--engine qwen3`, via `mlx-audio` on Apple Silicon, which synthesizes the deck in a continuous batch with a presentation narrator role prompt and slices clips with `Qwen3-ForcedAligner`) and embeds it in the HTML; its usage is at the top of the script. Do not run it or install `kokoro` / `mlx-audio` unasked — if not installed yet, ask the user before setting up a virtual environment (e.g. `.venv` with Python 3.10–3.12, `kokoro>=0.9.4`, `misaki[ja]`, `python -m unidic download` for Kokoro Japanese, or `mlx-audio` + `nagisa` for Qwen3-TTS) and downloading the model. When you generate embedded audio and have a tool that can inspect audio files (`read_file`), listen to several generated clips to check for misreadings, clipped endings or unnatural pauses and self-correct `data-say` / `data-caption` if needed. `build.py` preserves existing embedded audio clips across rebuilds; if you edit the narration, rerun `add_voice.py` after `build.py` to generate audio for the changed sentences.
 
 ## Controls to tell the user about
 

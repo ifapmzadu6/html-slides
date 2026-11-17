@@ -22,8 +22,8 @@ The example slides below are written in Japanese because that is the skill's mai
 
 ```html
 <section class="slide title">
-  <p class="kicker" data-say="この動画では、">2026年度 新人研修</p>
-  <h1 data-say="経費精算のやり方を、三分で説明します。">経費精算の<br>やり方</h1>
+  <p class="kicker">2026年度 新人研修</p>
+  <h1 data-say="この動画では、経費精算のやり方を三分で説明します。">経費精算の<br>やり方</h1>
   <p class="sub" data-say="最後まで見れば、今日から自分で申請できます。">3分でわかる</p>
 </section>
 ```

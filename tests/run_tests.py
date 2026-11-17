@@ -71,7 +71,9 @@ SELFTEST_JS = r"""
     ok('start: controls are labelled', $('#b-grid').getAttribute('aria-label') === 'All slides' && $('#start-silent').textContent.indexOf('captions only') > 0, $('#b-grid').getAttribute('aria-label'));
 
     key('ArrowRight'); ok('right arrow while stopped: slide 2, start screen gone, all revealed', cur() === 2 && $('#start').hidden && pend() === 0);
-    key('ArrowLeft'); ok('left arrow while stopped: back to slide 1', cur() === 1);
+    const barW = i => parseInt(document.querySelectorAll('#bar button i')[i].style.width, 10) || 0;
+    ok('progress bar on slide 2 while stopped: slide 1 is 100%, slide 2 is 0% and marked cur', barW(0) === 100 && barW(1) === 0 && document.querySelectorAll('#bar button')[1].classList.contains('cur'));
+    key('ArrowLeft'); ok('left arrow while stopped: back to slide 1', cur() === 1 && barW(0) === 0);
     key('End'); ok('End: last slide', cur() === N);
     key('ArrowRight'); ok('right arrow on the last slide: stays', cur() === N);
     key('Home'); ok('Home: first slide', cur() === 1);
@@ -125,7 +127,7 @@ SELFTEST_JS = r"""
 
     key('End'); await sleep(70000);
     ok('played to the end: stops and shows the start screen', !playing() && !$('#start').hidden && cur() === N, 'slide ' + cur());
-    ok('at the end: all revealed, no caption', pend() === 0 && cap() === '');
+    ok('at the end: all revealed, no caption, all progress bars 100%', pend() === 0 && cap() === '' && barW(N - 1) === 100);
     $('#start-play').click(); await sleep(400);
     ok('replay: starts from slide 1', cur() === 1 && playing() && $('#start').hidden);
 
@@ -426,9 +428,17 @@ def main():
     ok("add_voice: pcm_to_wav produces valid RIFF/WAVE header", wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and len(wav) == 44 + 6)
     sr_t = 24000
     f_t = int(sr_t * 0.02)
-    noisy = [0.0] * (20 * f_t) + [0.3] * (5 * f_t) + [0.0] * (25 * f_t) + [0.3] * (5 * f_t) + [0.0] * (20 * f_t)
+    noisy = [0.0] * (30 * f_t) + [0.3] * (5 * f_t) + [0.0] * (40 * f_t) + [0.3] * (5 * f_t) + [0.0] * (30 * f_t)
     cleaned_t = add_voice.clean_speech(noisy, sr_t)
     ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
+    ok("add_voice: _prep_qwen3_text normalizes readings and commas", add_voice._prep_qwen3_text("日本語話者、左右キー、") == "日本語の声 さゆうキー。")
+    _, _, _, short_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><p class="kicker" data-say="こちらは、">K</p><h1 data-say="タイトルです。">T</h1></section>')
+    ok("lint: warns on short narration fragment on .kicker", any(i["type"] == "short-sentence" for i in short_issues), short_issues)
+    v_tmp = tmp / "voice_preserve.html"
+    build.assemble({"title": "T", "theme": "light", "lang": "ja", "density": "normal", "footer": None}, "", '<section class="slide title"><h1 data-say="テストです。">T</h1></section>', v_tmp)
+    v_tmp.write_text(v_tmp.read_text(encoding="utf-8").replace(build.ENGINE_MARKER, '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">{"clips":{"テストです。":"data:audio/wav;base64,AA=="}}</script>\n<!-- VOICE:END -->\n' + build.ENGINE_MARKER, 1), encoding="utf-8")
+    build.assemble({"title": "T", "theme": "dark", "lang": "ja", "density": "normal", "footer": None}, "", '<section class="slide title"><h1 data-say="テストです。">T</h1></section>', v_tmp)
+    ok("build: assemble preserves VOICE:START block across rebuilds", "<!-- VOICE:START -->" in v_tmp.read_text(encoding="utf-8"))
 
     class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):

@@ -375,9 +375,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #player.ui #controls { opacity: 1; pointer-events: auto; }
 #bar { display: flex; gap: 3px; padding: 0 4px; }
 #bar button { flex: 1 1 0; min-width: 0; height: 22px; padding: 8px 0; border: 0; background: none; cursor: pointer; }
-#bar button span { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,.3); overflow: hidden; }
-#bar button i { display: block; height: 100%; width: 0; background: #fff; transition: width .3s linear; }
-#bar button:hover span { background: rgba(255,255,255,.5); }
+#bar button span { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,.28); overflow: hidden; }
+#bar button.cur span { background: rgba(255,255,255,.5); }
+#bar button i { display: block; height: 100%; width: 0; background: #fff; transition: width .12s linear; }
+#bar button:hover span { background: rgba(255,255,255,.6); }
 #btns { display: flex; align-items: center; gap: 2px; }
 #btns button { width: 44px; height: 40px; border: 0; background: none; color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font: 700 14px/1 var(--font); flex: none; }
 #btns button:hover { background: rgba(255,255,255,.16); }
@@ -439,8 +440,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 <!-- SLIDES:START - build.py replaces everything from this line down to SLIDES:END -->
 
 <section class="slide title">
-  <p class="kicker" data-say="稟議にあたり、">稟議資料　営業企画部</p>
-  <h1 data-say="営業部へのタブレット端末導入を、ご提案します。">営業部への<br>タブレット端末導入</h1>
+  <p class="kicker">稟議資料　営業企画部</p>
+  <h1 data-say="稟議にあたり、営業部へのタブレット端末導入をご提案します。">営業部への<br>タブレット端末導入</h1>
   <p class="sub" data-say="お願いしたいのは、A案での導入と、初年度予算の承認です。" data-caption="お願いしたいのは、A案での導入と、初年度予算896万円の承認です。">A案での導入と、初年度予算896万円の承認のお願い</p>
 </section>
 
@@ -708,6 +709,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
   /* ---------- state ---------- */
   var everPlayed = false, cur = 0, cueIdx = 0, partIdx = 0, playing = false, mid = false, ended = false, tok = 0;
+  var partStart = 0, partDur = 0, partPf = 0, inPart = false, progTimer = 0;
   var muted = qs.has('mute') || store.get('muted', '0') === '1';
   var capsOn = store.get('caps', '1') === '1';
   var RATES = [0.75, 1, 1.25, 1.5, 2];
@@ -820,7 +822,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     $$('.speaking', stage).forEach(function (e) { e.classList.remove('speaking'); });
     timeline[cur].forEach(function (c) { if (c.reveal) c.el.classList.toggle('pending', !full); });
     void sl.offsetWidth; sl.classList.remove('jump');
-    cueIdx = 0; partIdx = 0; mid = false; setCaption('');
+    cueIdx = 0; partIdx = 0; mid = !full; inPart = false; setCaption('');
     try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) {}
     updateUI();
   }
@@ -831,38 +833,41 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (!playing) return;
     var my = ++tok, T = timeline[cur];
     if (cueIdx >= T.length) {
-      setCaption(''); updateProgress(1);
+      inPart = false; setCaption(''); updateProgress(1);
       wait(900 / rate, my, function () {
-        if (cur < slides.length - 1) { showSlide(cur + 1, false); mid = true; wait(550, my, step); }
+        if (cur < slides.length - 1) { showSlide(cur + 1, false); wait(550, my, step); }
         else finish();
       });
       return;
     }
     var c = T[cueIdx], p = c.parts[partIdx];
-    mid = true;
+    mid = true; inPart = true; partStart = Date.now(); partDur = p.dur; partPf = 0;
     if (c.reveal) c.el.classList.remove('pending');
     c.el.classList.add('speaking');
     setCaption(p.cap); updateProgress();
     speak(p.say, my, function () {
+      inPart = false;
       partIdx++;
       if (partIdx >= c.parts.length) { partIdx = 0; cueIdx++; c.el.classList.remove('speaking'); }
+      updateProgress();
       wait(250 / rate, my, step);
     });
   }
   function play(silentMode) {
     if (silentMode) { muted = true; store.set('muted', '1'); }
     unlock();
+    var resume = !ended && mid && (cueIdx || partIdx);
     if (ended) { ended = false; showSlide(0, false); }
     else if (!mid) showSlide(cur, false);
-    playing = true; everPlayed = true; startEl.hidden = true;
+    playing = true; everPlayed = true; startEl.hidden = true; mid = true;
+    clearInterval(progTimer); progTimer = setInterval(function () { if (playing && inPart) updateProgress(); }, 100);
     var my = ++tok; stopSpeech(); updateUI(); poke();
-    wait(mid && (cueIdx || partIdx) ? 120 : 500, my, step);
-    mid = true;
+    wait(resume ? 120 : 500, my, step);
   }
-  function pause() { playing = false; tok++; stopSpeech(); updateUI(); }
+  function pause() { playing = false; inPart = false; clearInterval(progTimer); tok++; stopSpeech(); updateUI(); }
   function toggle() { playing ? pause() : play(); }
   function finish() {
-    playing = false; ended = true; mid = false; tok++; setCaption('');
+    playing = false; inPart = false; clearInterval(progTimer); ended = true; mid = false; tok++; setCaption('');
     $('#start-meta').textContent = tr('replay');
     startEl.hidden = false; updateUI();
   }
@@ -873,22 +878,38 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     else { showSlide(i, true); startEl.hidden = true; }
     poke();
   }
-  function restartPart() { if (!playing) return; var my = ++tok; stopSpeech(); wait(120, my, step); }
+  function restartPart() { if (!playing) return; inPart = false; var my = ++tok; stopSpeech(); wait(120, my, step); }
 
   /* ---------- UI ---------- */
-  var bar = $('#bar'), fills = [];
+  var bar = $('#bar'), barBtns = [], fills = [], barCur = -1;
   slides.forEach(function (s, i) {
     var b = document.createElement('button'); b.type = 'button'; b.style.flexGrow = Math.max(1, Math.round(slideDur[i] / 1000));
     b.setAttribute('aria-label', tr('goto').replace('{n}', i + 1)); b.title = s.getAttribute('aria-label');
     b.innerHTML = '<span><i></i></span>'; b.addEventListener('click', function () { go(i); });
-    bar.appendChild(b); fills.push($('i', b));
+    bar.appendChild(b); barBtns.push(b); fills.push($('i', b));
   });
   function updateProgress(force) {
-    var T = timeline[cur], done = 0;
+    var T = timeline[cur], done = 0, total = Math.max(1, slideDur[cur] - 1200);
     for (var k = 0; k < cueIdx && k < T.length; k++) done += T[k].dur;
     if (T[cueIdx]) for (var j = 0; j < partIdx; j++) done += T[cueIdx].parts[j].dur;
-    var frac = force != null ? force : (mid ? done / Math.max(1, slideDur[cur]) : 1);
-    fills.forEach(function (f, k) { f.style.width = (k < cur ? 100 : k > cur ? 0 : Math.round(frac * 100)) + '%'; });
+    if (inPart && T[cueIdx] && T[cueIdx].parts[partIdx]) {
+      var pf = (audio && !audio.paused && isFinite(audio.duration) && audio.duration > 0)
+        ? Math.min(1, audio.currentTime / audio.duration)
+        : Math.min(1, (Date.now() - partStart) * rate / Math.max(1, partDur));
+      partPf = Math.max(partPf, Math.max(0, pf));
+      done += partDur * partPf;
+    }
+    var frac = force != null ? force : (ended ? 1 : (mid ? Math.min(1, done / total) : 0));
+    var slideChanged = barCur !== cur;
+    barCur = cur;
+    fills.forEach(function (f, k) {
+      barBtns[k].classList.toggle('cur', k === cur);
+      var pct = k < cur ? 100 : k > cur ? 0 : Math.round(frac * 100);
+      var prev = parseInt(f.style.width, 10) || 0;
+      var snap = slideChanged || k !== cur || pct < prev || !playing;
+      if (snap) { f.style.transition = 'none'; f.style.width = pct + '%'; void f.offsetWidth; f.style.transition = ''; }
+      else f.style.width = pct + '%';
+    });
   }
   var PLAY = 'M6 3.5v17L21 12z', PAUSE = 'M6 4h4v16H6zM14 4h4v16h-4z';
   function updateUI() {

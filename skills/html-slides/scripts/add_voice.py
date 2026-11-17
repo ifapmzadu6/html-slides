@@ -38,6 +38,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -65,8 +66,13 @@ KOKORO_PY_VOICES = [
     ("bm_george", "British English (male)"),
 ]
 QWEN3_DEFAULT_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
+QWEN3_ALIGNER_MODEL = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
 QWEN3_DEFAULT_VOICE = "Ono_Anna"
-QWEN3_DEFAULT_INSTRUCT = "落ち着いた淡々としたニュース解説の口調で、感情を抑え、不必要な息継ぎや間を挟まずに明瞭に話してください。"
+QWEN3_DEFAULT_INSTRUCT = (
+    "あなたはプロのナレーターとして、パワーポイント資料のプレゼンテーション発表を行っています。"
+    "聴衆にスライドの内容がすっと伝わるよう、最初から最後まで一定の速度と落ち着いた声のトーンを保ち、"
+    "過剰な感情表現やため息を入れず、自然で明瞭な話し方で読み上げてください。"
+)
 QWEN3_VOICES = [
     ("Ono_Anna", "Japanese (female)"),
     ("Vivian", "Chinese (female)"),
@@ -167,25 +173,26 @@ def kokoro_lang_code(voice):
     return voice[0] if voice and voice[0] in "jabzefhip" else "j"
 
 
-def clean_speech(samples, sample_rate=24000, threshold=0.015, max_pause=0.18, keep_pause=0.10):
-    """Trim leading/trailing silence and shorten long internal breaths/pauses."""
+def clean_speech(samples, sample_rate=24000, threshold=0.004, max_pause=0.45, keep_pause=0.24):
+    """Trim leading/trailing silence and shorten abnormally long internal pauses without clipping voiceless consonants or endings."""
     win = max(1, int(sample_rate * 0.02))
     n_frames = len(samples) // win
     if n_frames < 3:
         return samples
-    # Compute per-frame RMS and dilate by 1 frame so soft consonant edges are preserved.
+    # Compute per-frame RMS and dilate by 2 frames (±40ms) so voiceless consonants (つ, っ, す, etc.) are preserved.
     rms = []
     for i in range(n_frames):
         chunk = samples[i * win : (i + 1) * win]
         rms.append((sum(x * x for x in chunk) / win) ** 0.5)
     active = [
-        any(rms[j] >= threshold for j in range(max(0, i - 1), min(n_frames, i + 2)))
+        any(rms[j] >= threshold for j in range(max(0, i - 2), min(n_frames, i + 3)))
         for i in range(n_frames)
     ]
     if not any(active):
         return samples
-    first = active.index(True)
-    last = n_frames - 1 - active[::-1].index(True)
+    # Keep 80ms (4 frames) before onset and 200ms (10 frames) after offset so trailing devoiced 'す/ます/です' is never clipped.
+    first = max(0, active.index(True) - 4)
+    last = min(n_frames - 1, n_frames - 1 - active[::-1].index(True) + 10)
     max_q = max(1, int(max_pause / 0.02))
     keep_q = max(1, int(keep_pause / 0.02))
     fade = min(win // 2, int(sample_rate * 0.01))
@@ -260,6 +267,24 @@ def qwen3_lang_code(voice):
     return QWEN3_VOICE_LANGS.get(voice, "auto")
 
 
+QWEN3_READING_FIXES = [
+    ("左右キー", "さゆうキー"),
+    ("左右の", "さゆうの"),
+    ("上下の", "じょうげの"),
+    ("日本語話者", "日本語の声"),
+    ("話者", "わしゃ"),
+]
+
+
+def _prep_qwen3_text(s):
+    s = re.sub(r"[、,]+\s*$", "", s.strip()).replace("、", " ")
+    for k, v in QWEN3_READING_FIXES:
+        s = s.replace(k, v)
+    if s and s[-1] not in "。！？!?.":
+        s += "。"
+    return s
+
+
 def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=None):
     import numpy as np  # noqa: PLC0415
     from mlx_audio.tts.utils import load_model  # noqa: PLC0415
@@ -268,7 +293,7 @@ def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=
         cache["model"] = load_model(model_id)
     results = list(
         cache["model"].generate(
-            text=text,
+            text=_prep_qwen3_text(text),
             voice=voice,
             instruct=instruct or None,
             temperature=temperature,
@@ -284,6 +309,131 @@ def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=
     sr = getattr(results[0], "sample_rate", 24000) or 24000
     cleaned = clean_speech(audio.tolist(), int(sr))
     return pcm_to_wav(cleaned, int(sr))
+
+
+QWEN3_ALIGNER_LANGS = {"ja": "Japanese", "en": "English", "ko": "Korean", "zh": "Chinese"}
+
+
+def _norm_alnum(s):
+    return "".join(c for c in s if unicodedata.category(c)[0] in ("L", "N"))
+
+
+def _min_energy_cut(samples, sr, t_left, t_right):
+    """Find the lowest-energy sample index after sentence end (t_left) and before next sentence start (t_right)."""
+    win = max(1, int(sr * 0.01))
+    gap = t_right - t_left
+    # Bias toward the end of the gap so trailing devoiced syllables ('〜です', '〜ます') of the previous sentence are kept intact.
+    start_t = t_left + min(0.12, max(0.0, gap * 0.45))
+    end_t = max(start_t, t_right - 0.02)
+    a = max(0, int(start_t * sr))
+    b = min(len(samples) - win, int(end_t * sr))
+    if b <= a:
+        return max(0, min(len(samples), int(max(t_left, t_right - 0.02) * sr)))
+    best_i, best_e = a, float("inf")
+    step = max(1, win // 2)
+    for idx in range(a, b + 1, step):
+        chunk = samples[idx : idx + win]
+        e = sum(x * x for x in chunk)
+        if e < best_e:
+            best_e, best_i = e, idx + win // 2
+    return best_i
+
+
+def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, temperature=None, all_texts=None):
+    """Synthesize sentences in multi-sentence batches for prosodic consistency, then slice with Qwen3-ForcedAligner."""
+    import numpy as np  # noqa: PLC0415
+    from mlx_audio.stt.utils import load_model as load_stt_model  # noqa: PLC0415
+    from mlx_audio.tts.utils import load_model as load_tts_model  # noqa: PLC0415
+
+    if "model" not in cache:
+        cache["model"] = load_tts_model(model_id)
+    if "aligner" not in cache:
+        try:
+            cache["aligner"] = load_stt_model(QWEN3_ALIGNER_MODEL)
+        except Exception:
+            cache["aligner"] = None
+
+    # If only 1 sentence needs generation in a multi-sentence deck, include 1-2 neighbouring sentences as prosodic context.
+    synth_list = list(texts)
+    if len(synth_list) == 1 and all_texts and len(all_texts) > 1 and synth_list[0] in all_texts:
+        pos = all_texts.index(synth_list[0])
+        lo = max(0, pos - 1)
+        hi = min(len(all_texts), lo + 3)
+        synth_list = list(all_texts[lo:hi])
+
+    # Group into batches of up to 200 sentences / ~5000 chars (~10+ min of audio at 12 Hz with max_tokens=8192)
+    # so even long multi-slide decks are synthesized in a single continuous take.
+    batches = []
+    cur_b, cur_chars = [], 0
+    for t in synth_list:
+        if cur_b and (len(cur_b) >= 200 or cur_chars + len(t) > 5000):
+            batches.append(cur_b)
+            cur_b, cur_chars = [], 0
+        cur_b.append(t)
+        cur_chars += len(t)
+    if cur_b:
+        batches.append(cur_b)
+
+    out = {}
+    lang = qwen3_lang_code(voice)
+    align_lang = QWEN3_ALIGNER_LANGS.get(lang, "Japanese")
+    for batch in batches:
+        if len(batch) == 1 or cache["aligner"] is None:
+            for t in batch:
+                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature)
+            continue
+        # Strip '、' for smoother TTS phrasing and join with '\n' (while split_pattern='') so the model leaves a clean pause between clips.
+        spoken_batch = [_prep_qwen3_text(s) for s in batch]
+        joined = "\n".join(spoken_batch)
+        try:
+            results = list(
+                cache["model"].generate(
+                    text=joined,
+                    voice=voice,
+                    instruct=instruct or None,
+                    temperature=temperature,
+                    lang_code=lang,
+                    speed=speed,
+                    split_pattern="",
+                    max_tokens=8192,
+                )
+            )
+            if not results:
+                raise ValueError("empty batch audio")
+            audio = np.concatenate([np.asarray(r.audio) for r in results])
+            sr = int(getattr(results[0], "sample_rate", 24000) or 24000)
+            bwav = tmp / "batch.wav"
+            bwav.write_bytes(pcm_to_wav(audio.tolist(), sr))
+            ares = cache["aligner"].generate(audio=str(bwav), text=joined, language=align_lang)
+            items = getattr(ares, "items", None) or []
+            if not items:
+                raise ValueError("no alignment items")
+            spans = []
+            idx = 0
+            for s in batch:
+                target = max(1, len(_norm_alnum(s)))
+                cur_len = 0
+                start_i = min(idx, len(items) - 1)
+                while idx < len(items) and cur_len < target:
+                    cur_len += len(_norm_alnum(items[idx].text))
+                    idx += 1
+                end_i = max(start_i, min(idx - 1, len(items) - 1))
+                spans.append((items[start_i].start_time, items[end_i].end_time))
+            samples_list = audio.tolist()
+            cuts = [max(0, int((spans[0][0] - 0.08) * sr))]
+            for k in range(len(batch) - 1):
+                cuts.append(_min_energy_cut(samples_list, sr, spans[k][1], spans[k + 1][0]))
+            cuts.append(min(len(samples_list), int((spans[-1][1] + 0.35) * sr)))
+            for k, s in enumerate(batch):
+                i0, i1 = cuts[k], max(cuts[k] + 1, cuts[k + 1])
+                seg = clean_speech(samples_list[i0:i1], sr, threshold=0.004)
+                if not seg:
+                    raise ValueError("empty segment after alignment")
+                out[s] = pcm_to_wav(seg, sr)
+        except Exception:
+            for t in batch:
+                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature)
+    return out
 
 
 def say_voices():
@@ -481,6 +631,11 @@ def main():
     qwen3_cache = {}
     with tempfile.TemporaryDirectory() as tmp:
         tmp = pathlib.Path(tmp)
+        qwen3_pre = (
+            qwen3_batch_synth(todo, label, a.speed, a.model, qwen3_cache, tmp, a.instruct, a.temperature, all_texts=texts)
+            if engine == "qwen3" and todo
+            else {}
+        )
         for n, t in enumerate(todo, 1):
             try:
                 if engine == "voicevox":
@@ -490,7 +645,7 @@ def main():
                 elif engine == "kokoro-py":
                     raw, ext = kokoro_py_synth(t, label, a.speed, kokoro_pipelines), ".wav"
                 elif engine == "qwen3":
-                    raw, ext = qwen3_synth(t, label, a.speed, a.model, qwen3_cache, a.instruct, a.temperature), ".wav"
+                    raw, ext = qwen3_pre[t], ".wav"
                 else:
                     raw, ext = say_synth(t, label, a.speed, tmp)
             except (urllib.error.URLError, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
