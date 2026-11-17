@@ -114,7 +114,7 @@ class Lint(HTMLParser):
         self.issues = []
         self.stack = []     # open tags: dict(tag, line, cls, kids, text)
         self.slides = []    # dict(line, cls, cues)
-        self.in_style = False
+        self.style_line = None
 
     def add(self, level, typ, msg, hint, line=None):
         self.issues.append({"line": line or self.getpos()[0], "type": typ, "level": level, "msg": msg, "hint": hint,
@@ -128,7 +128,7 @@ class Lint(HTMLParser):
         a = dict(attrs)
         cls = (a.get("class") or "").split()
         if tag == "style":
-            self.in_style = True
+            self.style_line = line
             return
         if tag in ("html", "head", "body"):
             self.add("error", "whole-page", "The source contains a <%s> document tag." % tag, INSIDE_SLIDES)
@@ -209,7 +209,7 @@ class Lint(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag == "style":
-            self.in_style = False
+            self.style_line = None
             return
         if tag in VOID:
             return
@@ -249,7 +249,7 @@ class Lint(HTMLParser):
             self.add("warn", "long-text", "The heading is %d characters (about 20 fit on one line)." % n, "Shorten the heading.", line=e["line"])
 
     def handle_data(self, data):
-        if self.in_style or not data.strip():
+        if self.style_line or not data.strip():
             return
         if not self.in_slide():
             self.add("error", "outside", 'Text is outside any slide: "%s"' % data.strip()[:20], INSIDE_SLIDES)
@@ -257,6 +257,8 @@ class Lint(HTMLParser):
             self.stack[-1]["text"] += data
 
     def finish(self):
+        if self.style_line:
+            self.add("error", "unclosed", "<style> is never closed.", "Add </style>.", line=self.style_line)
         for e in self.stack:
             if e["tag"] not in OPTIONAL_END:
                 self.issues.append({"line": e["line"], "type": "unclosed", "level": "error", "slide": 0,
@@ -271,6 +273,47 @@ class Lint(HTMLParser):
                                 "hint": 'Make slide 1 <section class="slide title"> with the deck title in an <h1>.'})
         self.issues.sort(key=lambda i: i["line"])
         return self.issues
+
+
+class SourceStyles(HTMLParser):
+    """Locate real style elements while leaving the rest of the markup verbatim."""
+
+    def __init__(self, body):
+        super().__init__()
+        self.body = body
+        self.line_offsets = [0] + [m.end() for m in re.finditer("\n", body)]
+        self.blocks = []
+        self.start = None
+
+    def source_offset(self):
+        line, column = self.getpos()
+        return self.line_offsets[line - 1] + column
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "style":
+            self.start = self.source_offset()
+            self.content_start = self.start + len(self.get_starttag_text())
+
+    def handle_endtag(self, tag):
+        if tag == "style" and self.start is not None:
+            close = self.source_offset()
+            end = self.body.index(">", close) + 1
+            self.blocks.append((self.start, end, self.body[self.content_start:close].strip()))
+            self.start = None
+
+    def handle_startendtag(self, tag, attrs):
+        pass  # No CSS content to extract.
+
+    def split(self):
+        self.feed(self.body)
+        self.close()
+        css, markup, previous = [], [], 0
+        for start, end, content in self.blocks:
+            markup.append(self.body[previous:start])
+            css.append(content)
+            previous = end
+        markup.append(self.body[previous:])
+        return "\n".join(css), "".join(markup).strip()
 
 
 def parse_source(text):
@@ -297,15 +340,14 @@ def parse_source(text):
     if meta["theme"] not in THEMES:
         problems.append({"line": 1, "slide": 0, "type": "unknown-theme", "level": "error", "msg": 'Theme "%s" does not exist.' % meta["theme"],
                          "hint": near(meta["theme"], THEMES) + "Available themes: " + ", ".join(THEMES) + "."})
-    styles = re.findall(r"<style\b[^>]*>(.*?)</style>", body, re.S)
-    slides = re.sub(r"<style\b[^>]*>.*?</style>\s*", "", body, flags=re.S).strip()
+    css, slides = SourceStyles(body).split()
     for bad in ("SLIDES:START", "SLIDES:END", "ENGINE JS"):
         if bad in slides:
             problems.append({"line": text[:text.index(bad)].count("\n") + 1, "slide": 0, "type": "whole-page", "level": "error",
                              "msg": 'The source contains "%s" (a whole page or the template was pasted in).' % bad,
                              "hint": 'The source holds only the settings comment and <section class="slide"> elements. Do not write <html>, <body> or any part of the template.'})
             break
-    return meta, "\n".join(s.strip() for s in styles), slides, problems
+    return meta, css, slides, problems
 
 
 def lint(text):
