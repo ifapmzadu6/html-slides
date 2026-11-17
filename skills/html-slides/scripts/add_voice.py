@@ -85,15 +85,15 @@ QWEN3_VOICES = [
     ("Sohee", "Korean (female)"),
 ]
 QWEN3_VOICE_LANGS = {
-    "Ono_Anna": "ja",
-    "Ryan": "en",
-    "Aiden": "en",
-    "Sohee": "ko",
-    "Vivian": "zh",
-    "Serena": "zh",
-    "Uncle_Fu": "zh",
-    "Dylan": "zh",
-    "Eric": "zh",
+    "Ono_Anna": "japanese",
+    "Ryan": "english",
+    "Aiden": "english",
+    "Sohee": "korean",
+    "Vivian": "chinese",
+    "Serena": "chinese",
+    "Uncle_Fu": "chinese",
+    "Dylan": "chinese",
+    "Eric": "chinese",
 }
 # Always connect straight to 127.0.0.1, ignoring any proxy settings, so the narration cannot leave the machine.
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -191,8 +191,10 @@ def clean_speech(samples, sample_rate=24000, threshold=0.004, max_pause=0.45, ke
     if not any(active):
         return samples
     # Keep 80ms (4 frames) before onset and 200ms (10 frames) after offset so trailing devoiced 'す/ます/です' is never clipped.
-    first = max(0, active.index(True) - 4)
-    last = min(n_frames - 1, n_frames - 1 - active[::-1].index(True) + 10)
+    first_act = active.index(True)
+    last_act = n_frames - 1 - active[::-1].index(True)
+    first = max(0, first_act - 4)
+    last = min(n_frames - 1, last_act + 10)
     max_q = max(1, int(max_pause / 0.02))
     keep_q = max(1, int(keep_pause / 0.02))
     fade = min(win // 2, int(sample_rate * 0.01))
@@ -221,11 +223,24 @@ def clean_speech(samples, sample_rate=24000, threshold=0.004, max_pause=0.45, ke
             else:
                 out.extend(samples[i * win : j * win])
             i = j
-    # Soft fade-in / fade-out at clip boundaries.
+    if last == n_frames - 1 and len(samples) > n_frames * win:
+        out.extend(samples[n_frames * win :])
+    # Normalize active speech loudness to ~-20 dBFS (RMS 0.095) with peak headroom at 0.90 so all clips play at a uniform volume.
+    if out:
+        sq = [x * x for x in out if abs(x) >= threshold]
+        act_rms = (sum(sq) / len(sq)) ** 0.5 if sq else 0.0
+        peak = max(abs(x) for x in out)
+        if act_rms > 1e-4 and peak > 1e-4:
+            gain = min(3.5, max(0.3, 0.095 / act_rms), 0.90 / peak)
+            out = [x * gain for x in out]
+    # Soft fade-in / fade-out at clip boundaries, then ensure at least 160ms (8 frames) of trailing silence cushion.
     for k in range(min(fade, len(out) // 2)):
         g = k / fade
         out[k] *= g
         out[-1 - k] *= g
+    tail_frames = last - last_act
+    if tail_frames < 8:
+        out.extend([0.0] * ((8 - tail_frames) * win))
     return out
 
 
@@ -263,26 +278,31 @@ def qwen3_available():
     return importlib.util.find_spec("mlx_audio") is not None
 
 
-def qwen3_lang_code(voice):
+def qwen3_lang_code(voice, text=""):
+    if text and re.search(r"[\u3040-\u30ff]", text):
+        return "japanese"
     return QWEN3_VOICE_LANGS.get(voice, "auto")
 
 
-QWEN3_READING_FIXES = [
-    ("左右キー", "さゆうキー"),
-    ("左右の", "さゆうの"),
-    ("上下の", "じょうげの"),
-    ("日本語話者", "日本語の声"),
-    ("話者", "わしゃ"),
-    ("埋め込まれ", "うめこまれ"),
-    ("埋め込み", "うめこみ"),
-    ("以上で", "いじょうで"),
-    ("抑揚", "よくよう"),
+QWEN3_SYMBOL_FIXES = [
+    ("◎", "二重丸"),
+    ("○", "丸"),
+    ("◯", "丸"),
+    ("△", "三角"),
+    ("×", "バツ"),
 ]
 
 
 def _prep_qwen3_text(s):
     s = re.sub(r"[、,]+\s*$", "", s.strip())
-    for k, v in QWEN3_READING_FIXES:
+    # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
+    s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
+    if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", s):
+        # Convert Kanji/ASCII decimal points in Japanese sentences (e.g. 二・三日, 六・八万円, 2.3日) to 'てん'.
+        s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
+        s = re.sub(r"(\d+)\.(\d+)", r"\1てん\2", s)
+        s = re.sub(r"てん([二三四五六七八九2-9])日", r"てん\1にち", s)
+    for k, v in QWEN3_SYMBOL_FIXES:
         s = s.replace(k, v)
     if s and s[-1] not in "。！？!?.":
         s += "。"
@@ -301,7 +321,7 @@ def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=
             voice=voice,
             instruct=instruct or None,
             temperature=temperature,
-            lang_code=qwen3_lang_code(voice),
+            lang_code=qwen3_lang_code(voice, text),
             speed=speed,
         )
     )
@@ -315,7 +335,16 @@ def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=
     return pcm_to_wav(cleaned, int(sr))
 
 
-QWEN3_ALIGNER_LANGS = {"ja": "Japanese", "en": "English", "ko": "Korean", "zh": "Chinese"}
+QWEN3_ALIGNER_LANGS = {
+    "japanese": "Japanese",
+    "english": "English",
+    "korean": "Korean",
+    "chinese": "Chinese",
+    "ja": "Japanese",
+    "en": "English",
+    "ko": "Korean",
+    "zh": "Chinese",
+}
 
 
 def _norm_alnum(s):
@@ -379,7 +408,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         batches.append(cur_b)
 
     out = {}
-    lang = qwen3_lang_code(voice)
+    lang = qwen3_lang_code(voice, " ".join(texts))
     align_lang = QWEN3_ALIGNER_LANGS.get(lang, "Japanese")
     for batch in batches:
         if len(batch) == 1 or cache["aligner"] is None:
@@ -424,12 +453,17 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 end_i = max(start_i, min(idx - 1, len(items) - 1))
                 spans.append((items[start_i].start_time, items[end_i].end_time))
             samples_list = audio.tolist()
-            cuts = [max(0, int((spans[0][0] - 0.08) * sr))]
+            cuts = [0]
             for k in range(len(batch) - 1):
                 cuts.append(_min_energy_cut(samples_list, sr, spans[k][1], spans[k + 1][0]))
-            cuts.append(min(len(samples_list), int((spans[-1][1] + 0.35) * sr)))
+            cuts.append(len(samples_list))
             for k, s in enumerate(batch):
-                i0, i1 = cuts[k], max(cuts[k] + 1, cuts[k + 1])
+                # Window around each sentence's aligned [start - 50ms, end + 400ms] bounded by neighbour cuts
+                # so inter-sentence breaths in the \n gap are discarded while trailing devoiced 'す/ます/です' is kept intact.
+                i0 = max(cuts[k], int((spans[k][0] - 0.05) * sr))
+                i1 = cuts[k + 1] if k == len(batch) - 1 else min(cuts[k + 1], int((spans[k][1] + 0.40) * sr))
+                if i1 <= i0:
+                    i0, i1 = cuts[k], max(cuts[k] + 1, cuts[k + 1])
                 seg = clean_speech(samples_list[i0:i1], sr, threshold=0.004)
                 if not seg:
                     raise ValueError("empty segment after alignment")
