@@ -120,26 +120,39 @@ def inspect(deck):
 def shots(rep, outdir):
     """Save a screenshot of every slide plus phone portrait and landscape views."""
     out = pathlib.Path(outdir).resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("slide-[0-9][0-9].png"):  # drop leftovers from an earlier build with more slides
-        old.unlink()
     browser, url = rep["browser"], rep["deck"].as_uri()
-    for n in range(1, rep["slides"] + 1):
-        png = out / ("slide-%02d.png" % n)
-        run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--screenshot=" + str(png), "%s?still=1#%d" % (url, n)])
-        if not png.exists():
-            raise CheckError("%s could not be saved." % png.name)
-    # Phone views: the slide with the most text, fully revealed, with a caption showing.
-    # A headless window cannot be narrower than about 500px, so a phone-sized iframe is scaled up to fill the window.
     stats = rep.get("stats") or [{"chars": 0}]
     dense = max(range(len(stats)), key=lambda k: stats[k].get("chars", 0)) + 1
-    for name, w, h in (("mobile-portrait", 390, 844), ("mobile-landscape", 844, 390)):
-        z = 2 if w < 500 else 1
-        wrap = out / ("_" + name + ".html")
-        wrap.write_text('<!DOCTYPE html><body style="margin:0;background:#000;overflow:hidden"><iframe src="%s?capdemo=1#%d" style="border:0;display:block;width:%dpx;height:%dpx;transform:scale(%d);transform-origin:0 0"></iframe>'
-                        % (url, dense, w, h, z), encoding="utf-8")
-        run(browser, ["--window-size=%d,%d" % (w * z, h * z), "--virtual-time-budget=4000", "--screenshot=" + str(out / (name + ".png")), wrap.as_uri()])
-        wrap.unlink()
+
+    def capture(png, page, width, height, budget):
+        result = run(browser, ["--window-size=%d,%d" % (width, height), "--virtual-time-budget=%d" % budget,
+                               "--screenshot=" + str(png), page])
+        if result.returncode or not png.is_file() or not png.stat().st_size:
+            raise CheckError("%s could not be saved. %s" % (png.name, result.stderr[-500:]))
+
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=out) as temp:
+            stage = pathlib.Path(temp)
+            for n in range(1, rep["slides"] + 1):
+                capture(stage / ("slide-%02d.png" % n), "%s?still=1#%d" % (url, n), 1280, 720, 3000)
+            # Scale a phone-sized iframe to fit the minimum headless window width.
+            wrap = stage / "phone.html"
+            for name, w, h in (("mobile-portrait", 390, 844), ("mobile-landscape", 844, 390)):
+                z = 2 if w < 500 else 1
+                wrap.write_text('<!DOCTYPE html><body style="margin:0;background:#000;overflow:hidden"><iframe src="%s?capdemo=1#%d" style="border:0;display:block;width:%dpx;height:%dpx;transform:scale(%d);transform-origin:0 0"></iframe>'
+                                % (url, dense, w, h, z), encoding="utf-8")
+                capture(stage / (name + ".png"), wrap.as_uri(), w * z, h * z, 4000)
+            for png in stage.glob("*.png"):
+                png.replace(out / png.name)
+            for old in out.glob("slide-*.png"):
+                match = re.fullmatch(r"slide-([0-9]{2,})\.png", old.name)
+                if match and old.is_file():
+                    number = int(match[1])
+                    if number > rep["slides"] and old.name == "slide-%02d.png" % number:
+                        old.unlink()
+    except OSError as e:
+        raise CheckError("Could not write screenshots to %s: %s" % (out, e)) from e
     return out, dense
 
 
