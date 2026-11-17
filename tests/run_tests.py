@@ -433,6 +433,7 @@ def main():
     ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
     ok("add_voice: _prep_qwen3_text normalizes trailing commas and terminal punctuation", add_voice._prep_qwen3_text("テストです、") == "テストです。")
     ok("add_voice: _prep_qwen3_text normalizes numbers, decimals and symbols", add_voice._prep_qwen3_text("費用は4,800万円、平均二・三日、評価は◎") == "費用は4800万円、平均二てん三にち、評価は二重丸。")
+    ok("add_voice: _prep_qwen3_text converts 5+ digit numbers to 万/億 and % to パーセント", add_voice._prep_qwen3_text("30,000円以上、使用率70%に達し") in ("3万円以上、使用率70パーセントにたっし。", "3万円以上、使用率70パーセントに達し。"))
     _, _, _, short_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><p class="kicker" data-say="こちらは、">K</p><h1 data-say="タイトルです。">T</h1></section>')
     ok("lint: warns on short narration fragment on .kicker", any(i["type"] == "short-sentence" for i in short_issues), short_issues)
     _, _, _, sym_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><h1 data-say="評価は◎です。">T</h1></section>')
