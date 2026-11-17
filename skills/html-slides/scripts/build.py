@@ -342,22 +342,59 @@ def assemble(meta, css, slides, out_path):
     out_path.write_text(t, encoding="utf-8")
 
 
+class DeckHead(HTMLParser):
+    """Read the settings stored in the built document's root and title."""
+    def __init__(self):
+        super().__init__()
+        self.attrs = {}
+        self.title = ""
+        self.in_head = False
+        self.in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "html":
+            self.attrs = dict(attrs)
+        elif tag == "head":
+            self.in_head = True
+        elif tag == "title" and self.in_head:
+            self.in_title = True
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self.in_title = False
+        elif tag == "head":
+            self.in_head = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            self.title += data
+
+
 def extract(deck_path, out_path):
     t = read_source(deck_path)
     m = REGION.search(t)
     if not m:
         fail("This HTML was not built by this skill: " + str(deck_path))
     body = t[m.end(1):m.start(2)].strip()
-    title = html.unescape(re.search(r"<title>(.*?)</title>", t, re.S).group(1).strip())
-    hm = re.search(r'<html lang="([^"]*)" data-theme="([^"]*)"([^>]*)>', t)
-    lang, theme, rest = (hm.group(1), hm.group(2), hm.group(3)) if hm else ("ja", "light", "")
-    fm = re.search(r'data-footer="([^"]*)"', rest)
+    head = DeckHead()
+    head.feed(t[:m.start()])
+    head.close()
+    title = head.title.strip()
+    if not title:
+        fail("The deck has no document title: " + str(deck_path))
+    settings = ["title: " + title, "theme: " + (head.attrs.get("data-theme") or "light")]
+    lang = head.attrs.get("lang")
+    if lang and lang != "ja":
+        settings.append("lang: " + lang)
+    if head.attrs.get("data-density") == "dense":
+        settings.append("density: dense")
+    if "data-footer" in head.attrs:
+        settings.append("footer: " + (head.attrs["data-footer"] or ""))
+    src = "<!--\n" + "\n".join(settings) + "\n-->\n"
     cm = CUSTOM.search(t)
-    src = "<!--\ntitle: %s\ntheme: %s\n%s%s%s-->\n" % (title, theme, "" if lang == "ja" else "lang: %s\n" % lang,
-                                                    "density: dense\n" if 'data-density="dense"' in rest else "",
-                                                    "footer: %s\n" % html.unescape(fm.group(1)) if fm else "")
     if cm:
         src += "<style>\n%s\n</style>\n" % cm.group(1).strip()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(src + "\n" + body + "\n", encoding="utf-8")
     print("Source extracted: %s" % out_path)
 

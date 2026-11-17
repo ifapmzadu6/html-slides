@@ -387,6 +387,27 @@ def main():
     dm2 = build.lint(dsrc2.read_text(encoding="utf-8"))
     ok("round trip: the dense sample keeps its settings and slides", dm2[0] == dmeta and dm2[2] == dslides, (dm2[0], dmeta))
 
+    edited = tmp / "edited.html"
+    markup = ddeck.read_text(encoding="utf-8")
+    root = "<HTML data-footer='Sales &amp; Ops' data-density=dense DATA-THEME='dark' lang='en'>"
+    markup = re.sub(r"<html [^>]+>", root, markup, count=1)
+    markup = re.sub(r"<title>.*?</title>", '<TITLE id="name">A &amp; B</TITLE>', markup, count=1)
+    edited.write_text(markup, encoding="utf-8")
+    recovered = tmp / "nested" / "edited.slides.html"
+    result = subprocess.run([sys.executable, build.__file__, "--extract", str(edited), "-o", str(recovered)],
+                            capture_output=True, text=True)
+    ok("extract: creates the destination directory", result.returncode == 0 and recovered.is_file(), result.stderr)
+    if recovered.is_file():
+        recovered_meta, _, recovered_slides, _, _ = build.lint(recovered.read_text(encoding="utf-8"))
+        ok("extract: preserves settings across equivalent HTML serialization",
+           recovered_meta == dict(dmeta, title="A & B", footer="Sales & Ops", theme="dark", lang="en")
+           and recovered_slides == dslides, recovered_meta)
+    edited.write_text(markup.replace('<TITLE id="name">A &amp; B</TITLE>', ''), encoding="utf-8")
+    result = subprocess.run([sys.executable, build.__file__, "--extract", str(edited)],
+                            capture_output=True, text=True)
+    ok("extract: reports a missing title without writing a source",
+       result.returncode == 2 and "no document title" in result.stdout and not (tmp / "edited.slides.html").exists())
+
     # --- 5. overflow that is easy to miss ---
     cases = (("a long URL that cannot wrap", '<section class="slide"><h2 data-say="Next.">https://example.com/very/long/path/that/cannot/wrap/anywhere/at/all/because/it/has/no/spaces/in/it/whatsoever</h2></section>'),
              ("text spilling out of a box that is too short", '<section class="slide"><h2 data-say="Next.">Heading</h2><div class="cols" style="height:120px"><div class="card"><p>とても長い文章がカードの中に入っていて、高さが足りないので下にあふれてしまう例です。さらに続けて書きます。まだ続きます。</p></div><div class="card"><p>short</p></div></div><p>next element</p></section>'))
