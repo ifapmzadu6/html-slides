@@ -529,6 +529,21 @@ def main():
     build.assemble({"title": "T", "theme": "dark", "lang": "ja", "density": "normal", "footer": None}, "", '<section class="slide title"><h1 data-say="テストです。">T</h1></section>', v_tmp)
     ok("build: assemble preserves VOICE:START block across rebuilds", "<!-- VOICE:START -->" in v_tmp.read_text(encoding="utf-8"))
 
+    language_deck = tmp / "voice-language.html"
+    with patch.object(sys, "argv", ["add_voice.py", str(language_deck), "--engine", "qwen3", "--speaker", "Ryan"]), \
+         patch.object(add_voice, "qwen3_available", return_value=True), \
+         patch.object(add_voice, "compress", return_value=(wav, "audio/wav")), \
+         patch.object(add_voice, "qwen3_batch_synth", return_value={"Hello.": wav}) as generate:
+        for tag, expected_lang, expected_calls in (("en-US", "english", 1), ("fr-CA", "french", 2), ("fr", "french", 2)):
+            build.assemble(dict(meta, lang=tag), "", COVER, language_deck)
+            status = add_voice.main()
+            ok("qwen3: uses deck language and caches clips for %s" % tag,
+               status == 0 and generate.call_count == expected_calls and generate.call_args.kwargs["lang"] == expected_lang)
+        build.assemble(dict(meta, lang="fi"), "", COVER, language_deck)
+        original = language_deck.read_bytes()
+        ok("qwen3: reports an unsupported deck language before synthesis",
+           add_voice.main() == 2 and generate.call_count == 2 and language_deck.read_bytes() == original)
+
     class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass

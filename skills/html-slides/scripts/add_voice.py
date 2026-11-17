@@ -46,6 +46,7 @@ import wave
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from build import DeckHead
 from check import CheckError, find_browser, run, setup_console  # noqa: E402
 
 BLOCK = re.compile(r"<!-- VOICE:START -->.*?<!-- VOICE:END -->\n?", re.S)
@@ -362,13 +363,13 @@ def _prep_qwen3_text(s, lang="japanese"):
     return s
 
 
-def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=None):
+def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=None, lang=None):
     import numpy as np  # noqa: PLC0415
     from mlx_audio.tts.utils import load_model  # noqa: PLC0415
 
     if "model" not in cache:
         cache["model"] = load_model(model_id)
-    lang = qwen3_lang_code(voice, text)
+    lang = lang or qwen3_lang_code(voice, text)
     results = list(
         cache["model"].generate(
             text=_prep_qwen3_text(text, lang),
@@ -389,15 +390,10 @@ def qwen3_synth(text, voice, speed, model_id, cache, instruct=None, temperature=
     return pcm_to_wav(cleaned, int(sr))
 
 
-QWEN3_ALIGNER_LANGS = {
-    "japanese": "Japanese",
-    "english": "English",
-    "korean": "Korean",
-    "chinese": "Chinese",
-    "ja": "Japanese",
-    "en": "English",
-    "ko": "Korean",
-    "zh": "Chinese",
+QWEN3_DECK_LANGS = {
+    "ja": "japanese", "en": "english", "zh": "chinese", "ko": "korean",
+    "de": "german", "es": "spanish", "fr": "french", "it": "italian",
+    "pt": "portuguese", "ru": "russian",
 }
 
 
@@ -429,7 +425,7 @@ def _min_energy_cut(samples, sr, t_left, t_right):
     return best_i
 
 
-def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, temperature=None, all_texts=None):
+def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, temperature=None, all_texts=None, lang=None):
     """Synthesize sentences in multi-sentence batches for prosodic consistency, then slice with Qwen3-ForcedAligner."""
     import numpy as np  # noqa: PLC0415
     from mlx_audio.stt.utils import load_model as load_stt_model  # noqa: PLC0415
@@ -465,13 +461,17 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         batches.append(cur_b)
 
     out = {}
-    lang = qwen3_lang_code(voice, " ".join(texts))
-    align_lang = QWEN3_ALIGNER_LANGS.get(lang, "Japanese")
-    sentinel = {"japanese": "いち、に、さん。", "chinese": "一，二，三。", "korean": "하나, 둘, 셋."}.get(lang, "One, two, three.")
+    lang = lang or qwen3_lang_code(voice, " ".join(texts))
+    align_lang = lang.capitalize() if lang != "auto" else "Japanese"
+    sentinel = {
+        "japanese": "いち、に、さん。", "chinese": "一，二，三。", "korean": "하나, 둘, 셋.",
+        "german": "Eins, zwei, drei.", "spanish": "Uno, dos, tres.", "french": "Un, deux, trois.",
+        "italian": "Uno, due, tre.", "portuguese": "Um, dois, três.", "russian": "Один, два, три.",
+    }.get(lang, "One, two, three.")
     for batch in batches:
         if cache["aligner"] is None:
             for t in batch:
-                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature)
+                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature, lang=lang)
             continue
         # Join sentences with '\n' (while split_pattern='') and append a dummy sentinel sentence so Qwen3-TTS's final
         # codec EOS token never clips the trailing mora ('〜ます' / '〜ました') of the last sentence in the batch.
@@ -530,7 +530,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 out[s] = pcm_to_wav(seg, sr)
         except Exception:
             for t in batch:
-                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature)
+                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature, lang=lang)
     return out
 
 
@@ -693,7 +693,18 @@ def main():
                 print("  %-15s %s" % (vid, desc))
             return 0
         label = a.speaker or QWEN3_DEFAULT_VOICE
-        key = "qwen3:v2:%s:%s:%s:%s" % (a.model, label, a.instruct or "", "" if a.temperature is None else a.temperature)
+        head = DeckHead()
+        head.feed(src.partition("<!-- SLIDES:START")[0])
+        head.close()
+        deck_lang = head.attrs.get("lang") or ""
+        primary = deck_lang.lower().replace("_", "-").split("-")[0]
+        lang = QWEN3_DECK_LANGS.get(primary)
+        if deck_lang and not lang:
+            print("ERROR: Qwen3 does not support deck language '%s'. Supported language codes: %s."
+                  % (deck_lang, ", ".join(sorted(QWEN3_DECK_LANGS))))
+            return 2
+        key = "qwen3:v3:%s:%s:%s:%s:%s" % (lang or "infer", a.model, label, a.instruct or "",
+                                              "" if a.temperature is None else a.temperature)
     else:
         if shutil.which("say") is None:
             print("ERROR: the say engine exists only on macOS.")
@@ -730,7 +741,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = pathlib.Path(tmp)
         qwen3_pre = (
-            qwen3_batch_synth(todo, label, a.speed, a.model, qwen3_cache, tmp, a.instruct, a.temperature, all_texts=texts)
+            qwen3_batch_synth(todo, label, a.speed, a.model, qwen3_cache, tmp, a.instruct, a.temperature, all_texts=texts, lang=lang)
             if engine == "qwen3" and todo
             else {}
         )
