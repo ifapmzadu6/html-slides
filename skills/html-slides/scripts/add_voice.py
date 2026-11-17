@@ -65,7 +65,7 @@ KOKORO_PY_VOICES = [
     ("bf_emma", "British English (female)"),
     ("bm_george", "British English (male)"),
 ]
-QWEN3_DEFAULT_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
+QWEN3_DEFAULT_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
 QWEN3_ALIGNER_MODEL = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
 QWEN3_DEFAULT_VOICE = "Ono_Anna"
 QWEN3_DEFAULT_INSTRUCT = (
@@ -273,11 +273,15 @@ QWEN3_READING_FIXES = [
     ("上下の", "じょうげの"),
     ("日本語話者", "日本語の声"),
     ("話者", "わしゃ"),
+    ("埋め込まれ", "うめこまれ"),
+    ("埋め込み", "うめこみ"),
+    ("以上で", "いじょうで"),
+    ("抑揚", "よくよう"),
 ]
 
 
 def _prep_qwen3_text(s):
-    s = re.sub(r"[、,]+\s*$", "", s.strip()).replace("、", " ")
+    s = re.sub(r"[、,]+\s*$", "", s.strip())
     for k, v in QWEN3_READING_FIXES:
         s = s.replace(k, v)
     if s and s[-1] not in "。！？!?.":
@@ -410,8 +414,8 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 raise ValueError("no alignment items")
             spans = []
             idx = 0
-            for s in batch:
-                target = max(1, len(_norm_alnum(s)))
+            for s, spoken_s in zip(batch, spoken_batch):
+                target = max(1, len(_norm_alnum(spoken_s)))
                 cur_len = 0
                 start_i = min(idx, len(items) - 1)
                 while idx < len(items) and cur_len < target:
@@ -462,12 +466,12 @@ def compress(raw, ext, tmp):
     src.write_bytes(raw)
     if shutil.which("ffmpeg"):
         dst = tmp / "out.mp3"
-        r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-b:a", "48k", str(dst)], capture_output=True)
+        r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-b:a", "96k", str(dst)], capture_output=True)
         if r.returncode == 0 and dst.exists():
             return dst.read_bytes(), "audio/mpeg"
     if shutil.which("afconvert"):
         dst = tmp / "out.m4a"
-        r = subprocess.run(["afconvert", "-f", "m4af", "-d", "aac", "-b", "48000", "-c", "1", str(src), str(dst)], capture_output=True)
+        r = subprocess.run(["afconvert", "-f", "m4af", "-d", "aac", "-b", "96000", "-c", "1", str(src), str(dst)], capture_output=True)
         if r.returncode == 0 and dst.exists():
             return dst.read_bytes(), "audio/mp4"
     if ext == ".wav":
