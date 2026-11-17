@@ -130,6 +130,8 @@ class Lint(HTMLParser):
         if tag == "style":
             self.in_style = True
             return
+        if tag in ("html", "head", "body"):
+            self.add("error", "whole-page", "The source contains a <%s> document tag." % tag, INSIDE_SLIDES)
         if tag == "script":
             self.add("error", "script", "<script> is not allowed in the source.",
                      "Remove the <script>. The player supplies all behaviour; use data-say and data-anim only.")
@@ -297,7 +299,7 @@ def parse_source(text):
                          "hint": near(meta["theme"], THEMES) + "Available themes: " + ", ".join(THEMES) + "."})
     styles = re.findall(r"<style\b[^>]*>(.*?)</style>", body, re.S)
     slides = re.sub(r"<style\b[^>]*>.*?</style>\s*", "", body, flags=re.S).strip()
-    for bad in ("<html", "<body", "<head", "SLIDES:START", "SLIDES:END", "ENGINE JS"):
+    for bad in ("SLIDES:START", "SLIDES:END", "ENGINE JS"):
         if bad in slides:
             problems.append({"line": text[:text.index(bad)].count("\n") + 1, "slide": 0, "type": "whole-page", "level": "error",
                              "msg": 'The source contains "%s" (a whole page or the template was pasted in).' % bad,
@@ -373,20 +375,21 @@ def main():
     src = pathlib.Path(a.source).resolve()
     if not src.exists():
         fail("File not found: " + str(src))
+    if a.out:
+        out = pathlib.Path(a.out).resolve()
+    elif a.extract:
+        out = src.with_name(src.stem + ".slides.html")
+    else:
+        name = src.name[:-len(".slides.html")] if src.name.endswith(".slides.html") else src.stem + ".out"
+        out = src.with_name(name + ".html")
+    if out.exists() and out.samefile(src):
+        fail("The output path is the same as the source. Pass -o with a different name.")
+
     if a.extract:
-        out = pathlib.Path(a.out).resolve() if a.out else src.with_name(src.stem + ".slides.html")
         if out.exists() and not a.out:
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         extract(src, out)
         return 0
-
-    if a.out:
-        out = pathlib.Path(a.out).resolve()
-    else:
-        name = src.name[:-len(".slides.html")] if src.name.endswith(".slides.html") else src.stem + ".out"
-        out = src.with_name(name + ".html")
-    if out == src:
-        fail("The output path is the same as the source. Pass -o with a different name.")
 
     # 1. source lint
     meta, css, slides, issues, lines = lint(read_source(src))

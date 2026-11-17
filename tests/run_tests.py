@@ -273,6 +273,10 @@ def main():
     ok("lint: a source without settings is an error", any(i["type"] == "no-header" for i in build.lint('<section class="slide"><h2 data-say="Hi.">x</h2></section>')[3]))
     good = HEAD + '<style>.mine { color: red; }</style>\n<section class="slide title">\n<h1 data-say>Title</h1>\n<p class="mine">x<br>y</p>\n<ul><li>a<li>b</ul>\n<svg viewBox="0 0 10 10"><rect width="5" height="5"/><text font-size="3">a</text></svg>\n<a href="https://example.com">link</a>\n</section>'
     ok("lint: accepts custom classes, optional end tags, SVG and links", not errors(build.lint(good)[3]), build.lint(good)[3])
+    header = HEAD + '<section class="slide title"><header><h1 data-say>Title</h1></header></section>'
+    ok("lint: a slide can contain a header element", not errors(build.lint(header)[3]))
+    ok("lint: document tags are detected regardless of case",
+       any(i["type"] == "whole-page" for i in errors(build.lint(HEAD + "<HTML></HTML>")[3])))
     bom = tmp / "bom.slides.html"
     bom.write_bytes(b"\xef\xbb\xbf" + starter.read_bytes())
     ok("lint: reads a source that starts with a BOM", not errors(build.lint(build.read_source(bom))[3]))
@@ -330,6 +334,17 @@ def main():
     ok("dense: labels and remarks inside a table are not too small", not [i for i in pr["issues"] if i["type"] == "small-text"], pr["issues"])
 
     # --- 4. round trip ---
+    for mode, source, flags in (("build", starter, ["--no-render"]), ("extract", deck, ["--extract"])):
+        original = source.read_bytes()
+        input_path = tmp / ("input-" + mode + ".html")
+        input_path.write_bytes(original)
+        alias = tmp / ("alias-" + mode + ".html")
+        os.link(input_path, alias)
+        for output in (input_path, alias):
+            result = subprocess.run([sys.executable, build.__file__, *flags, str(input_path), "-o", str(output)],
+                                    capture_output=True, text=True)
+            ok("%s: refuses to overwrite input via %s" % (mode, output.name),
+               result.returncode == 2 and "same as the source" in result.stdout and input_path.read_bytes() == original)
     src2 = tmp / "round.slides.html"
     build.extract(deck, src2)
     m2 = build.lint(src2.read_text(encoding="utf-8"))
