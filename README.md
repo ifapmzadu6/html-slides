@@ -105,6 +105,8 @@ Narration uses the voice installed on the viewer's device, so its quality depend
 
 If you want a consistent voice, `add_voice.py` can generate audio on your own computer with a VOICEVOX-compatible engine, Kokoro-82M (`--engine kokoro`), or Qwen3-TTS (`--engine qwen3` via `mlx-audio`) and embed it in the HTML. Network requests are restricted to `127.0.0.1`.
 
+Qwen3 uses the source’s `lang` setting for pronunciation and `--speaker` for the voice. For example, `lang: en-GB` selects English synthesis. Changing the synthesis language regenerates the embedded clips the next time you run `add_voice.py`.
+
 ## Tests
 
 ```sh
