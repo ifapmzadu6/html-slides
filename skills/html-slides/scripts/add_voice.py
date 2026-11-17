@@ -307,12 +307,29 @@ def _get_tagger():
     return _TAGGER
 
 
+JA_DIGITS = ("ゼロ", "いち", "に", "さん", "よん", "ご", "ろく", "なな", "はち", "きゅう")
+
+
+def _ja_currency_group(n):
+    """Write each place explicitly so the synthesizer can read it as a yen amount."""
+    numerals = "〇一二三四五六七八九"
+    parts = []
+    for place, unit in ((1000, "千"), (100, "百"), (10, "十"), (1, "")):
+        digit, n = divmod(n, place)
+        if digit:
+            parts.append(("" if digit == 1 and unit else numerals[digit]) + unit)
+    return "".join(parts)
+
+
 def _ja_num_units(m):
     n = int(m.group(0))
     if n < 10000 or n >= 10**12:
         return m.group(0)
     oku, rem = divmod(n, 100_000_000)
     man, rest = divmod(rem, 10_000)
+    if m.string.startswith("円", m.end()):
+        return "".join(_ja_currency_group(group) + unit for group, unit in ((oku, "億"), (man, "万"), (rest, ""))
+                       if group)
     parts = []
     if oku:
         parts.append(f"{oku}億")
@@ -331,11 +348,15 @@ def _prep_qwen3_text(s, lang="japanese"):
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
     if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", s):
-        # Convert 5+ digit integers (>= 10,000) into explicit 億/万 units (e.g. 30000円 -> 3万円) so TTS never miscounts zeros.
-        s = re.sub(r"(?<![\d.])\d{5,12}(?![\d.万億])", _ja_num_units, s)
+        # A labeled identifier is a sequence of digits, including leading zeros.
+        s = re.sub(r"(番号(?:は|が|：|:)?[ \t]*)([0-9０-９]+)(?![\dA-Za-z_.-])",
+                   lambda m: m[1] + "、".join(JA_DIGITS[int(d)] for d in m[2]), s)
+        # Only quantities with explicit units should acquire 万 or 億.
+        s = re.sub(r"(?<![A-Za-z_\d.])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
+                   _ja_num_units, s)
         # Convert Kanji/ASCII decimal points in Japanese sentences (e.g. 二・三日, 六・八万円, 2.3日) to 'てん'.
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
-        s = re.sub(r"(\d+)\.(\d+)", r"\1てん\2", s)
+        s = re.sub(r"(?<![A-Za-z_\d.])(\d+)\.(\d+)(?![A-Za-z_\d]|\.\d)", r"\1てん\2", s)
         s = re.sub(r"てん([二三四五六七八九2-9])日", r"てん\1にち", s)
         s = re.sub(r"(?<![\w\d])[+＋](?=\d)", "プラス", s)
         s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
@@ -346,6 +367,7 @@ def _prep_qwen3_text(s, lang="japanese"):
 
                 parts = []
                 for w in tagger(s):
+                    parts.append(w.white_space)
                     surf = w.surface
                     kana = getattr(w.feature, "kana", None)
                     # Expand 1-kanji verbs with implicit geminate 'っ' (e.g. 達し -> たっし, 発し -> はっし) so 'っ' is never dropped.
@@ -703,7 +725,8 @@ def main():
             print("ERROR: Qwen3 does not support deck language '%s'. Supported language codes: %s."
                   % (deck_lang, ", ".join(sorted(QWEN3_DECK_LANGS))))
             return 2
-        key = "qwen3:v3:%s:%s:%s:%s:%s" % (lang or "infer", a.model, label, a.instruct or "",
+        version = "v4" if lang in ("japanese", None) else "v3"
+        key = "qwen3:%s:%s:%s:%s:%s:%s" % (version, lang or "infer", a.model, label, a.instruct or "",
                                               "" if a.temperature is None else a.temperature)
     else:
         if shutil.which("say") is None:

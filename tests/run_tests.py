@@ -512,7 +512,15 @@ def main():
     ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
     ok("add_voice: _prep_qwen3_text normalizes trailing commas and terminal punctuation", add_voice._prep_qwen3_text("テストです、") == "テストです。")
     ok("add_voice: _prep_qwen3_text normalizes numbers, decimals and symbols", add_voice._prep_qwen3_text("費用は4,800万円、平均二・三日、評価は◎") == "費用は4800万円、平均二てん三にち、評価は二重丸。")
-    ok("add_voice: _prep_qwen3_text converts 5+ digit numbers to 万/億 and % to パーセント", add_voice._prep_qwen3_text("30,000円以上、使用率70%に達し") in ("3万円以上、使用率70パーセントにたっし。", "3万円以上、使用率70パーセントに達し。"))
+    ok("add_voice: _prep_qwen3_text converts 5+ digit numbers to 万/億 and % to パーセント", add_voice._prep_qwen3_text("30,000円以上、使用率70%に達し") in ("三万円以上、使用率70パーセントにたっし。", "三万円以上、使用率70パーセントに達し。"))
+    for phrase, spoken in (
+        ("受付番号は012345です。", "受付番号はゼロ、いち、に、さん、よん、ごです。"),
+        ("型番AB12345、版はv1.2.3です。", "型番AB12345、版はv1.2.3です。"),
+        ("更新日は2026.11.18です。", "更新日は2026.11.18です。"),
+        ("資料名はProject Alpha、合計は123456円です。", "資料名はProject Alpha、合計は十二万三千四百五十六円です。"),
+        ("利用率は2.3%です。", "利用率は2てん3パーセントです。"),
+    ):
+        ok("qwen3: Japanese number and spacing rules for " + phrase, add_voice._prep_qwen3_text(phrase) == spoken)
     for lang, phrase in (("chinese", "增长20%，温度为5℃。"), ("english", "A × B"), ("korean", "성장률 20%")):
         ok("qwen3: preserves %s narration" % lang, add_voice._prep_qwen3_text(phrase, lang) == phrase)
     for end, onset in ((1000, 1020), (1000, 1003), (1000, 1000), (1000, 980), (1000, 1500)):
