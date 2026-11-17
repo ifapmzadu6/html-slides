@@ -423,7 +423,7 @@ def main():
     except SystemExit:
         ok("add_voice: local_url rejects remote host", True)
     ok("add_voice: kokoro_lang_code maps ja/en/gb", (add_voice.kokoro_lang_code("jf_alpha"), add_voice.kokoro_lang_code("af_heart"), add_voice.kokoro_lang_code("bm_george")) == ("j", "a", "b"))
-    ok("add_voice: qwen3_lang_code maps ja/en/ko/zh", (add_voice.qwen3_lang_code("Ono_Anna"), add_voice.qwen3_lang_code("Ryan"), add_voice.qwen3_lang_code("Sohee"), add_voice.qwen3_lang_code("Vivian")) == ("ja", "en", "ko", "zh"))
+    ok("add_voice: qwen3_lang_code maps japanese/english/korean/chinese", (add_voice.qwen3_lang_code("Ono_Anna"), add_voice.qwen3_lang_code("Ryan"), add_voice.qwen3_lang_code("Sohee"), add_voice.qwen3_lang_code("Vivian")) == ("japanese", "english", "korean", "chinese"))
     wav = add_voice.pcm_to_wav([0.0, 0.5, -0.5], 24000)
     ok("add_voice: pcm_to_wav produces valid RIFF/WAVE header", wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and len(wav) == 44 + 6)
     sr_t = 24000
@@ -431,9 +431,12 @@ def main():
     noisy = [0.0] * (30 * f_t) + [0.3] * (5 * f_t) + [0.0] * (40 * f_t) + [0.3] * (5 * f_t) + [0.0] * (30 * f_t)
     cleaned_t = add_voice.clean_speech(noisy, sr_t)
     ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
-    ok("add_voice: _prep_qwen3_text normalizes readings and trailing commas", add_voice._prep_qwen3_text("日本語話者、左右キー、") == "日本語の声、さゆうキー。")
+    ok("add_voice: _prep_qwen3_text normalizes trailing commas and terminal punctuation", add_voice._prep_qwen3_text("テストです、") == "テストです。")
+    ok("add_voice: _prep_qwen3_text normalizes numbers, decimals and symbols", add_voice._prep_qwen3_text("費用は4,800万円、平均二・三日、評価は◎") == "費用は4800万円、平均二てん三にち、評価は二重丸。")
     _, _, _, short_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><p class="kicker" data-say="こちらは、">K</p><h1 data-say="タイトルです。">T</h1></section>')
     ok("lint: warns on short narration fragment on .kicker", any(i["type"] == "short-sentence" for i in short_issues), short_issues)
+    _, _, _, sym_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><h1 data-say="評価は◎です。">T</h1></section>')
+    ok("lint: warns on rating symbol in data-say", any(i["type"] == "say-symbol" for i in sym_issues), sym_issues)
     v_tmp = tmp / "voice_preserve.html"
     build.assemble({"title": "T", "theme": "light", "lang": "ja", "density": "normal", "footer": None}, "", '<section class="slide title"><h1 data-say="テストです。">T</h1></section>', v_tmp)
     v_tmp.write_text(v_tmp.read_text(encoding="utf-8").replace(build.ENGINE_MARKER, '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">{"clips":{"テストです。":"data:audio/wav;base64,AA=="}}</script>\n<!-- VOICE:END -->\n' + build.ENGINE_MARKER, 1), encoding="utf-8")
