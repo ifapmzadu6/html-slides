@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "html-slides"
@@ -332,6 +333,38 @@ def main():
     pr = check.inspect(built(tmp, "pair.html", pair))
     ok("captions: sentences are paired one by one", pr["texts"][:2] == ["エーピーアイです。", "せんにひゃく円です。"], pr["texts"][:3])
     ok("dense: labels and remarks inside a table are not too small", not [i for i in pr["issues"] if i["type"] == "small-text"], pr["issues"])
+
+    # Capture every view before replacing a previous export.
+    gallery = tmp / "screenshots"
+    gallery.mkdir()
+    wrapper = gallery / "_mobile-portrait.html"
+    wrapper.write_text("existing user file", encoding="utf-8")
+    obsolete = gallery / "slide-100.png"
+    obsolete.touch()
+    check.shots(pr, gallery)
+    expected = {"slide-01.png", "slide-02.png", "mobile-portrait.png", "mobile-landscape.png"}
+    images = {p.name: p.read_bytes() for p in gallery.glob("*.png")}
+    ok("shots: exports every view and removes obsolete three-digit slides",
+       set(images) == expected and all(data.startswith(b"\x89PNG\r\n\x1a\n") for data in images.values()))
+    ok("shots: keeps existing files named like phone wrappers",
+       wrapper.exists() and wrapper.read_text(encoding="utf-8") == "existing user file")
+
+    def missing_landscape(browser, args):
+        path = pathlib.Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("--screenshot=")))
+        if path.name != "mobile-landscape.png":
+            path.write_bytes(b"replacement")
+        return subprocess.CompletedProcess(args, 0, stderr="")
+
+    with patch.object(check, "run", missing_landscape):
+        try:
+            check.shots(pr, gallery)
+        except check.CheckError as e:
+            ok("shots: reports a missing phone capture", "mobile-landscape.png" in str(e))
+        else:
+            ok("shots: reports a missing phone capture", False)
+    ok("shots: a capture failure preserves previous images and removes temporary files",
+       set(p.name for p in gallery.iterdir()) == expected | {wrapper.name}
+       and all((gallery / name).read_bytes() == data for name, data in images.items()))
 
     # --- 4. round trip ---
     for mode, source, flags in (("build", starter, ["--no-render"]), ("extract", deck, ["--extract"])):
