@@ -431,7 +431,7 @@ def main():
     noisy = [0.0] * (30 * f_t) + [0.3] * (5 * f_t) + [0.0] * (40 * f_t) + [0.3] * (5 * f_t) + [0.0] * (30 * f_t)
     cleaned_t = add_voice.clean_speech(noisy, sr_t)
     ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
-    ok("add_voice: _prep_qwen3_text normalizes readings and commas", add_voice._prep_qwen3_text("日本語話者、左右キー、") == "日本語の声 さゆうキー。")
+    ok("add_voice: _prep_qwen3_text normalizes readings and trailing commas", add_voice._prep_qwen3_text("日本語話者、左右キー、") == "日本語の声、さゆうキー。")
     _, _, _, short_issues, _ = build.lint('<!--\ntitle: T\ntheme: light\n-->\n<section class="slide title"><p class="kicker" data-say="こちらは、">K</p><h1 data-say="タイトルです。">T</h1></section>')
     ok("lint: warns on short narration fragment on .kicker", any(i["type"] == "short-sentence" for i in short_issues), short_issues)
     v_tmp = tmp / "voice_preserve.html"
