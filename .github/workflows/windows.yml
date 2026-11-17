@@ -1,0 +1,53 @@
+name: Windows
+on:
+  pull_request:
+    paths:
+      - 'skills/html-slides/**'
+      - 'tests/**'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU narration engine
+        run: |
+          python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pip install qwen-tts
+      - name: Build and narrate a Japanese deck
+        env:
+          OMP_NUM_THREADS: '4'
+        run: |
+          @'
+          <!--
+          title: Windows narration
+          lang: ja
+          -->
+          <section class="slide title"><h1 data-say="気温は−5℃です。">気温</h1></section>
+          '@ | Set-Content -Encoding utf8 '音声 sample.slides.html'
+          python skills/html-slides/scripts/build.py '音声 sample.slides.html'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python skills/html-slides/scripts/add_voice.py '音声 sample.html' --engine qwen3 --speaker Ono_Anna
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python skills/html-slides/scripts/check.py '音声 sample.html'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (!(Select-String -Quiet -SimpleMatch 'data:audio/' '音声 sample.html')) { throw 'Missing embedded audio' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-narration
+          path: '音声 sample.html'
+          retention-days: 3
+      - name: Run browser regression suite
+        run: python tests/run_tests.py

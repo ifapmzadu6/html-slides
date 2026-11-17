@@ -23,10 +23,6 @@ CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
 ]
 NAMES = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "msedge", "chrome"]
 
@@ -51,6 +47,14 @@ def find_browser():
     env = os.environ.get("CHROME")
     if env and os.path.exists(env):
         return env
+    if sys.platform == "win32":
+        for key in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+            root = os.environ.get(key)
+            if root:
+                for app in ("Google/Chrome/Application/chrome.exe", "Microsoft/Edge/Application/msedge.exe"):
+                    candidate = pathlib.Path(root) / app
+                    if candidate.is_file():
+                        return str(candidate)
     for p in CANDIDATES:
         if os.path.exists(p):
             return p
