@@ -353,6 +353,11 @@ def _prep_qwen3_text(s, lang="japanese"):
     s = re.sub(r"[、,]+\s*$", "", s.strip())
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
+    # Expand the sign before decimal conversion can replace the leading zero.
+    # Limit hyphen interpretation to measured quantities, keeping dates and IDs intact.
+    signs = {"-": "マイナス", "－": "マイナス", "−": "マイナス", "+": "プラス", "＋": "プラス", "±": "プラスマイナス"}
+    s = re.sub(r"(?<![\dA-Za-zＡ-Ｚａ-ｚ_%％℃])(?<!\d度)([-－−+＋±])(?=[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*[%％℃度])",
+               lambda m: signs[m[1]], s)
     # Read each fractional digit, including zeros, even in a numeric-only cue.
     s = re.sub(r"(?<![A-Za-z_\d.．])([0-9０-９]+)[.．]([0-9０-９]+)(?![A-Za-z_\d]|[.．]\d)(日)?",
                _ja_decimal, s)
@@ -733,7 +738,7 @@ def main():
             print("ERROR: Qwen3 does not support deck language '%s'. Supported language codes: %s."
                   % (deck_lang, ", ".join(sorted(QWEN3_DECK_LANGS))))
             return 2
-        version = "v5" if lang in ("japanese", None) else "v3"
+        version = "v6" if lang in ("japanese", None) else "v3"
         key = "qwen3:%s:%s:%s:%s:%s:%s" % (version, lang or "infer", a.model, label, a.instruct or "",
                                               "" if a.temperature is None else a.temperature)
     else:
