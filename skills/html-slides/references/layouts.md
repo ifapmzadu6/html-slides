@@ -96,7 +96,7 @@ Makes one number memorable. `data-anim="pop"` suits it. `tc` centres the slide h
 
 ```html
 <section class="slide tc">
-  <p class="kicker" data-say="導入した結果、">導入の効果</p>
+  <p class="kicker" data-say="次に、導入の効果です。">導入の効果</p>
   <p class="stat" data-anim="pop" data-say="申請にかかる時間は、七割減りました。">70<small>%減</small></p>
   <p class="big" data-say="月末の残業も、ほとんどなくなっています。">月末の残業が<mark>ほぼゼロ</mark>に</p>
 </section>

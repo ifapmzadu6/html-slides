@@ -173,7 +173,7 @@ def kokoro_lang_code(voice):
     return voice[0] if voice and voice[0] in "jabzefhip" else "j"
 
 
-def clean_speech(samples, sample_rate=24000, threshold=0.004, max_pause=0.45, keep_pause=0.24):
+def clean_speech(samples, sample_rate=24000, threshold=0.0015, max_pause=0.45, keep_pause=0.24):
     """Trim leading/trailing silence and shorten abnormally long internal pauses without clipping voiceless consonants or endings."""
     win = max(1, int(sample_rate * 0.02))
     n_frames = len(samples) // win
@@ -291,6 +291,35 @@ QWEN3_SYMBOL_FIXES = [
     ("△", "三角"),
     ("×", "バツ"),
 ]
+_TAGGER = False
+
+
+def _get_tagger():
+    global _TAGGER  # noqa: PLW0603
+    if _TAGGER is False:
+        try:
+            import fugashi  # noqa: PLC0415
+
+            _TAGGER = fugashi.Tagger()
+        except Exception:
+            _TAGGER = None
+    return _TAGGER
+
+
+def _ja_num_units(m):
+    n = int(m.group(0))
+    if n < 10000 or n >= 10**12:
+        return m.group(0)
+    oku, rem = divmod(n, 100_000_000)
+    man, rest = divmod(rem, 10_000)
+    parts = []
+    if oku:
+        parts.append(f"{oku}億")
+    if man:
+        parts.append(f"{man}万")
+    if rest:
+        parts.append(str(rest))
+    return "".join(parts)
 
 
 def _prep_qwen3_text(s):
@@ -298,10 +327,31 @@ def _prep_qwen3_text(s):
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
     if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", s):
+        # Convert 5+ digit integers (>= 10,000) into explicit 億/万 units (e.g. 30000円 -> 3万円) so TTS never miscounts zeros.
+        s = re.sub(r"(?<![\d.])\d{5,12}(?![\d.万億])", _ja_num_units, s)
         # Convert Kanji/ASCII decimal points in Japanese sentences (e.g. 二・三日, 六・八万円, 2.3日) to 'てん'.
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
         s = re.sub(r"(\d+)\.(\d+)", r"\1てん\2", s)
         s = re.sub(r"てん([二三四五六七八九2-9])日", r"てん\1にち", s)
+        s = re.sub(r"(?<![\w\d])[+＋](?=\d)", "プラス", s)
+        s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
+        tagger = _get_tagger()
+        if tagger is not None:
+            try:
+                import jaconv  # noqa: PLC0415
+
+                parts = []
+                for w in tagger(s):
+                    surf = w.surface
+                    kana = getattr(w.feature, "kana", None)
+                    # Expand 1-kanji verbs with implicit geminate 'っ' (e.g. 達し -> たっし, 発し -> はっし) so 'っ' is never dropped.
+                    if w.feature.pos1 == "動詞" and kana and "ッ" in kana and "っ" not in surf and "ッ" not in surf:
+                        parts.append(jaconv.kata2hira(kana))
+                    else:
+                        parts.append(surf)
+                s = "".join(parts)
+            except Exception:
+                pass
     for k, v in QWEN3_SYMBOL_FIXES:
         s = s.replace(k, v)
     if s and s[-1] not in "。！？!?.":
@@ -355,13 +405,14 @@ def _min_energy_cut(samples, sr, t_left, t_right):
     """Find the lowest-energy sample index after sentence end (t_left) and before next sentence start (t_right)."""
     win = max(1, int(sr * 0.01))
     gap = t_right - t_left
-    # Bias toward the end of the gap so trailing devoiced syllables ('〜です', '〜ます') of the previous sentence are kept intact.
-    start_t = t_left + min(0.12, max(0.0, gap * 0.45))
-    end_t = max(start_t, t_right - 0.02)
+    # Search in the middle-to-late silence zone [t_left + 280ms, t_right - 100ms] so trailing devoiced syllables
+    # ('〜です', '〜ます', '〜ました') are kept intact while pre-sentence breaths before t_right are excluded.
+    start_t = t_left + min(0.28, max(0.05, gap * 0.50))
+    end_t = max(start_t + 0.02, t_right - min(0.10, max(0.02, gap * 0.22)))
     a = max(0, int(start_t * sr))
     b = min(len(samples) - win, int(end_t * sr))
     if b <= a:
-        return max(0, min(len(samples), int(max(t_left, t_right - 0.02) * sr)))
+        return max(0, min(len(samples), int(max(t_left, t_right - 0.04) * sr)))
     best_i, best_e = a, float("inf")
     step = max(1, win // 2)
     for idx in range(a, b + 1, step):
@@ -394,12 +445,12 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         hi = min(len(all_texts), lo + 3)
         synth_list = list(all_texts[lo:hi])
 
-    # Group into batches of up to 200 sentences / ~5000 chars (~10+ min of audio at 12 Hz with max_tokens=8192)
-    # so even long multi-slide decks are synthesized in a single continuous take.
+    # Group into batches of up to 2000 sentences / ~50000 chars (with max_tokens=81920)
+    # so even very large decks are synthesized in a single continuous take.
     batches = []
     cur_b, cur_chars = [], 0
     for t in synth_list:
-        if cur_b and (len(cur_b) >= 200 or cur_chars + len(t) > 5000):
+        if cur_b and (len(cur_b) >= 2000 or cur_chars + len(t) > 50000):
             batches.append(cur_b)
             cur_b, cur_chars = [], 0
         cur_b.append(t)
@@ -410,14 +461,17 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
     out = {}
     lang = qwen3_lang_code(voice, " ".join(texts))
     align_lang = QWEN3_ALIGNER_LANGS.get(lang, "Japanese")
+    sentinel = "いち、に、さん。" if lang == "japanese" else "One, two, three."
     for batch in batches:
-        if len(batch) == 1 or cache["aligner"] is None:
+        if cache["aligner"] is None:
             for t in batch:
                 out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature)
             continue
-        # Strip '、' for smoother TTS phrasing and join with '\n' (while split_pattern='') so the model leaves a clean pause between clips.
+        # Join sentences with '\n' (while split_pattern='') and append a dummy sentinel sentence so Qwen3-TTS's final
+        # codec EOS token never clips the trailing mora ('〜ます' / '〜ました') of the last sentence in the batch.
         spoken_batch = [_prep_qwen3_text(s) for s in batch]
-        joined = "\n".join(spoken_batch)
+        synth_spoken = spoken_batch + [sentinel]
+        joined = "\n".join(synth_spoken)
         try:
             results = list(
                 cache["model"].generate(
@@ -428,7 +482,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                     lang_code=lang,
                     speed=speed,
                     split_pattern="",
-                    max_tokens=8192,
+                    max_tokens=81920,
                 )
             )
             if not results:
@@ -443,7 +497,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 raise ValueError("no alignment items")
             spans = []
             idx = 0
-            for s, spoken_s in zip(batch, spoken_batch):
+            for spoken_s in synth_spoken:
                 target = max(1, len(_norm_alnum(spoken_s)))
                 cur_len = 0
                 start_i = min(idx, len(items) - 1)
@@ -454,17 +508,16 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 spans.append((items[start_i].start_time, items[end_i].end_time))
             samples_list = audio.tolist()
             cuts = [0]
-            for k in range(len(batch) - 1):
+            for k in range(len(batch)):
                 cuts.append(_min_energy_cut(samples_list, sr, spans[k][1], spans[k + 1][0]))
-            cuts.append(len(samples_list))
             for k, s in enumerate(batch):
-                # Window around each sentence's aligned [start - 50ms, end + 400ms] bounded by neighbour cuts
+                # Window around each sentence's aligned [start - 45ms, end + 450ms] bounded by neighbour cuts
                 # so inter-sentence breaths in the \n gap are discarded while trailing devoiced 'す/ます/です' is kept intact.
-                i0 = max(cuts[k], int((spans[k][0] - 0.05) * sr))
-                i1 = cuts[k + 1] if k == len(batch) - 1 else min(cuts[k + 1], int((spans[k][1] + 0.40) * sr))
+                i0 = max(cuts[k], int((spans[k][0] - 0.045) * sr))
+                i1 = min(cuts[k + 1], int((spans[k][1] + 0.45) * sr))
                 if i1 <= i0:
                     i0, i1 = cuts[k], max(cuts[k] + 1, cuts[k + 1])
-                seg = clean_speech(samples_list[i0:i1], sr, threshold=0.004)
+                seg = clean_speech(samples_list[i0:i1], sr, threshold=0.0015)
                 if not seg:
                     raise ValueError("empty segment after alignment")
                 out[s] = pcm_to_wav(seg, sr)
