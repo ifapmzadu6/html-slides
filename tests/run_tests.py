@@ -278,6 +278,16 @@ def main():
     ok("lint: a slide can contain a header element", not errors(build.lint(header)[3]))
     ok("lint: document tags are detected regardless of case",
        any(i["type"] == "whole-page" for i in errors(build.lint(HEAD + "<HTML></HTML>")[3])))
+    commented = "<!-- <style>.inactive { color: red }</style> -->"
+    narrated = '<section class="slide title"><h1 class="active" data-say="Use <style> tags </style> here">Demo</h1></section>'
+    style_source = HEAD + commented + '\n<STYLE title="a > b">.active { color: blue }</STYLE>\n<style>h1 { margin: 0 }</style>\n' + narrated
+    _, css_blocks, markup, style_issues, _ = build.lint(style_source)
+    ok("styles: extracts active rules in order across tag case and quoted attributes",
+       not errors(style_issues) and css_blocks == ".active { color: blue }\nh1 { margin: 0 }", style_issues)
+    ok("styles: preserves comments and literal markup inside narration", commented in markup and narrated in markup)
+    unclosed = build.lint(HEAD + COVER + "\n<style>h1 { color: blue }")[3]
+    ok("styles: reports an unterminated block at its opening line",
+       any(i["type"] == "unclosed" and i["line"] == (HEAD + COVER + "\n").count("\n") + 1 for i in errors(unclosed)))
     bom = tmp / "bom.slides.html"
     bom.write_bytes(b"\xef\xbb\xbf" + starter.read_bytes())
     ok("lint: reads a source that starts with a BOM", not errors(build.lint(build.read_source(bom))[3]))
