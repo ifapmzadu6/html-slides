@@ -548,7 +548,8 @@ def main():
     ok("build: assemble preserves VOICE:START block across rebuilds", "<!-- VOICE:START -->" in v_tmp.read_text(encoding="utf-8"))
 
     language_deck = tmp / "voice-language.html"
-    with patch.object(sys, "argv", ["add_voice.py", str(language_deck), "--engine", "qwen3", "--speaker", "Ryan"]), \
+    with patch.object(add_voice.platform, "system", return_value="Darwin"), \
+         patch.object(sys, "argv", ["add_voice.py", str(language_deck), "--engine", "qwen3", "--speaker", "Ryan"]), \
          patch.object(add_voice, "qwen3_available", return_value=True), \
          patch.object(add_voice, "compress", return_value=(wav, "audio/wav")), \
          patch.object(add_voice, "qwen3_batch_synth", return_value={"Hello.": wav}) as generate:

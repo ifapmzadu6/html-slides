@@ -103,9 +103,29 @@ python3 skills/html-slides/scripts/build.py deck.slides.html --shots deck-shots
 
 Narration uses the voice installed on the viewer's device, so its quality depends on the device, and a device with no on-device voice for the deck's language plays captions only. This is deliberate. Browsers also offer online voices that sound better, but they send the text to a server, and the player never selects them.
 
-If you want a consistent voice, `add_voice.py` can generate audio on your own computer with a VOICEVOX-compatible engine, Kokoro-82M (`--engine kokoro`), or Qwen3-TTS (`--engine qwen3` via `mlx-audio`) and embed it in the HTML. Network requests are restricted to `127.0.0.1`.
+If you want a consistent voice, `add_voice.py` can generate audio on your own computer with a VOICEVOX-compatible engine, Kokoro-82M (`--engine kokoro`), or Qwen3-TTS (`--engine qwen3` via PyTorch on Windows or MLX on Apple Silicon) and embed it in the HTML. Speech-engine API calls stay on the loopback interface. Model weights are downloaded on first use.
 
 Qwen3 uses the source’s `lang` setting for pronunciation and `--speaker` for the voice. For example, `lang: en-GB` selects English synthesis. Changing the synthesis language regenerates the embedded clips the next time you run `add_voice.py`.
+
+### Windows (PowerShell)
+
+Use 64-bit Python 3.12 and Edge or Chrome. From the repository directory, build a deck and open it:
+
+```powershell
+py -3.12 skills/html-slides/scripts/build.py deck.slides.html --shots deck-shots
+Start-Process .\deck.html
+```
+
+To embed Qwen3 narration, install the official PyTorch backend in a virtual environment. These commands use the CPU build:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+.\.venv\Scripts\python.exe -m pip install qwen-tts
+.\.venv\Scripts\python.exe skills/html-slides/scripts/add_voice.py deck.html --engine qwen3 --speaker Ono_Anna
+```
+
+On a machine with an NVIDIA GPU, install the matching CUDA builds of PyTorch and torchaudio before installing `qwen-tts`. The script selects CUDA when PyTorch exposes it. Windows synthesizes one sentence per clip using the deck language and the same Japanese pronunciation rules as the Mac backend. The first run downloads the CustomVoice model. For an offline setup, pass its local directory with `--model`. The resulting HTML includes the audio and can be opened on another PC.
 
 ## Tests
 
@@ -123,7 +143,7 @@ TLA_JAR=/path/to/tla2tools.jar tests/tla/run.sh
 
 ## Known limits
 
-- Developed and tested with headless Chrome on macOS. Behaviour on real Windows, iOS and Android devices, and how real voices sound, has not been verified by the author.
+- The browser regression suite runs on macOS and Windows. Physical iOS and Android playback and device-specific voices require separate testing.
 - The checks measure layout with the fonts of the machine that builds the deck; a line that just fits there can wrap on another system.
 - Dense slides cannot be read on a phone held upright.
 - The checks cannot judge the content: whether the narration flows, or whether a model added statements that were not in the material it was given.
