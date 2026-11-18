@@ -47,7 +47,7 @@ import wave
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from build import DeckHead, deck_lock
+from build import DeckHead, deck_lock, staged_html
 from check import CheckError, find_browser, run, setup_console  # noqa: E402
 
 BLOCK = re.compile(r"<!-- VOICE:START -->.*?<!-- VOICE:END -->\n?", re.S)
@@ -678,21 +678,14 @@ def save_voice_data(deck, original, voice_data):
         data = json.dumps(voice_data, ensure_ascii=False).replace("</", "<\\/")
         block = '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">%s</script>\n<!-- VOICE:END -->\n' % data
         src = src.replace(ENGINE, block + ENGINE, 1)
-    with tempfile.NamedTemporaryFile(dir=deck.parent, delete=False) as staged:
-        path = pathlib.Path(staged.name)
-    try:
-        path.write_text(src, encoding="utf-8")
-        with deck_lock(deck):
-            try:
-                current = deck.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                current = None
-            if current != original:
-                raise OSError("The deck changed during audio processing. Rerun against the updated deck.")
-            shutil.copymode(deck, path)
-            path.replace(deck)
-    finally:
-        path.unlink(missing_ok=True)
+    with staged_html(deck, src) as staged, deck_lock(deck):
+        try:
+            current = deck.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            current = None
+        if current != original:
+            raise OSError("The deck changed during audio processing. Rerun against the updated deck.")
+        staged.replace(deck)
 
 
 def main():

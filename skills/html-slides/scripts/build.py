@@ -40,6 +40,7 @@ import html
 import os
 import pathlib
 import re
+import shutil
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -385,6 +386,20 @@ def deck_lock(deck):
         yield  # Closing the handle also releases the lock after an exception.
 
 
+@contextmanager
+def staged_html(destination, content):
+    """Prepare a complete file for replacement, keeping existing output permissions."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as tmp:
+        staged = pathlib.Path(tmp) / "output.html"
+        staged.write_text(content, encoding="utf-8")
+        if destination.exists():
+            if not os.access(destination, os.W_OK):
+                raise PermissionError("Output is read-only: %s" % destination)
+            shutil.copymode(destination, staged)
+        yield staged
+
+
 def assemble(meta, css, slides, out_path):
     t = TEMPLATE.read_text(encoding="utf-8")
     extra = ' translate="no"' + (' data-density="dense"' if meta.get("density") == "dense" else "") + (' data-footer="%s"' % html.escape(meta["footer"]) if meta.get("footer") is not None else "")
@@ -395,13 +410,13 @@ def assemble(meta, css, slides, out_path):
         fail("The template is damaged: " + str(TEMPLATE))
     if css:
         t = t.replace("</head>", '<style id="custom">\n%s\n</style>\n</head>' % css, 1)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     with deck_lock(out_path):
         if out_path.exists():
             vm = VOICE_BLOCK.search(out_path.read_text(encoding="utf-8"))
             if vm and ENGINE_MARKER in t:
                 t = t.replace(ENGINE_MARKER, vm.group(0) + ENGINE_MARKER, 1)
-        out_path.write_text(t, encoding="utf-8")
+        with staged_html(out_path, t) as staged:
+            staged.replace(out_path)
 
 
 class DeckHead(HTMLParser):
@@ -456,8 +471,8 @@ def extract(deck_path, out_path):
     cm = CUSTOM.search(t)
     if cm:
         src += "<style>\n%s\n</style>\n" % cm.group(1).strip()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(src + "\n" + body + "\n", encoding="utf-8")
+    with staged_html(out_path, src + "\n" + body + "\n") as staged:
+        staged.replace(out_path)
     print("Source extracted: %s" % out_path)
 
 
@@ -487,7 +502,10 @@ def main():
     if a.extract:
         if out.exists() and not a.out:
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
-        extract(src, out)
+        try:
+            extract(src, out)
+        except OSError as e:
+            fail("Could not extract to %s: %s" % (out, e))
         return 0
 
     # 1. source lint
