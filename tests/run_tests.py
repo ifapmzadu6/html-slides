@@ -23,6 +23,7 @@ What is covered:
 
 The sample decks and several fixtures are Japanese because the skill is used mostly for Japanese decks.
 """
+from contextlib import contextmanager
 import base64
 import html
 import json
@@ -389,6 +390,31 @@ def main():
                                     capture_output=True, text=True)
             ok("%s: refuses to overwrite input via %s" % (mode, output.name),
                result.returncode == 2 and "same as the source" in result.stdout and input_path.read_bytes() == original)
+    competing_deck = tmp / "competing.html"
+    competing_deck.write_bytes(deck.read_bytes())
+    competing_source = tmp / "competing.slides.html"
+    stage = build.staged_html
+
+    @contextmanager
+    def create_source_before_publish(destination, content):
+        with stage(destination, content) as staged:
+            destination.write_text("saved by another writer", encoding="utf-8")
+            yield staged
+
+    with patch.object(build, "staged_html", create_source_before_publish), \
+         patch.object(sys, "argv", ["build.py", "--extract", str(competing_deck)]):
+        try:
+            build.main()
+        except SystemExit as e:
+            ok("extract: preserves a source created during default extraction",
+               e.code == 2 and competing_source.read_text(encoding="utf-8") == "saved by another writer")
+        else:
+            ok("extract: preserves a source created during default extraction", False)
+
+    with patch.object(sys, "argv", ["build.py", "--extract", str(competing_deck), "-o", str(competing_source)]):
+        ok("extract: explicit output still permits overwriting",
+           build.main() == 0 and build.lint(competing_source.read_text(encoding="utf-8"))[2] == slides)
+
     src2 = tmp / "round.slides.html"
     build.extract(deck, src2)
     m2 = build.lint(src2.read_text(encoding="utf-8"))
