@@ -35,10 +35,14 @@ Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (file missing, no
 """
 import argparse
 import difflib
+import hashlib
 import html
+import os
 import pathlib
 import re
 import sys
+import tempfile
+from contextlib import contextmanager
 from html.parser import HTMLParser
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -363,6 +367,24 @@ def lint(text):
     return meta, css, slides, issues, [s["line"] for s in p.slides]
 
 
+@contextmanager
+def deck_lock(deck):
+    """Serialize local read/modify/write operations without holding a lock during synthesis."""
+    key = os.fsencode(os.path.normcase(str(deck.resolve())))
+    folder = "html-slides-locks" if os.name == "nt" else "html-slides-locks-%d" % os.getuid()
+    locks = pathlib.Path(tempfile.gettempdir()) / folder
+    locks.mkdir(mode=0o700, exist_ok=True)
+    with (locks / hashlib.sha256(key).hexdigest()).open("a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        yield  # Closing the handle also releases the lock after an exception.
+
+
 def assemble(meta, css, slides, out_path):
     t = TEMPLATE.read_text(encoding="utf-8")
     extra = ' translate="no"' + (' data-density="dense"' if meta.get("density") == "dense" else "") + (' data-footer="%s"' % html.escape(meta["footer"]) if meta.get("footer") is not None else "")
@@ -373,15 +395,13 @@ def assemble(meta, css, slides, out_path):
         fail("The template is damaged: " + str(TEMPLATE))
     if css:
         t = t.replace("</head>", '<style id="custom">\n%s\n</style>\n</head>' % css, 1)
-    if out_path.exists():
-        try:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with deck_lock(out_path):
+        if out_path.exists():
             vm = VOICE_BLOCK.search(out_path.read_text(encoding="utf-8"))
             if vm and ENGINE_MARKER in t:
                 t = t.replace(ENGINE_MARKER, vm.group(0) + ENGINE_MARKER, 1)
-        except OSError:
-            pass
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(t, encoding="utf-8")
+        out_path.write_text(t, encoding="utf-8")
 
 
 class DeckHead(HTMLParser):
@@ -479,7 +499,10 @@ def main():
         return 1
 
     # 2. assemble
-    assemble(meta, css, slides, out)
+    try:
+        assemble(meta, css, slides, out)
+    except OSError as e:
+        fail("Could not update %s: %s" % (out, e))
     print("Built: %s (%d slides, theme %s)" % (out, len(lines), meta["theme"]), flush=True)
     if a.no_render:
         check.print_issues(issues)
