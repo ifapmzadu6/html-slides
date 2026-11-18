@@ -588,6 +588,33 @@ def main():
     ok("trim: preserves exact PCM frames, all other clips and cache settings", actual == voice_data)
     ok("trim: preserves the player and slides", add_voice.BLOCK.sub("", reviewed) == original_markup)
 
+    # Fail after the first bytes are written, as a full filesystem can do.
+    protected = tmp / "interrupted"
+    protected.mkdir()
+    target = protected / "deck.html"
+    target.write_bytes(trim_deck.read_bytes())
+    existing = target.read_bytes()
+    def short_write(path, content, **kwargs):
+        path.write_bytes(content[:16].encode("utf-8"))
+        raise OSError("simulated short write")
+    for operation, publish in (("build", lambda: build.assemble(meta, "", COVER, target)),
+                               ("extract", lambda: build.extract(trim_deck, target))):
+        for present in (True, False):
+            if present:
+                target.write_bytes(existing)
+            else:
+                target.unlink()
+            with patch.object(pathlib.Path, "write_text", short_write):
+                try:
+                    publish()
+                except OSError:
+                    pass
+                else:
+                    raise AssertionError("expected write failure")
+            expected = [target] if present else []
+            ok("%s: interrupted write with existing output %s" % (operation, present),
+               list(protected.iterdir()) == expected and (not present or target.read_bytes() == existing))
+
     # Simulate a real rebuild between sentence discovery and final publication.
     racing = tmp / "rebuilt-during-synthesis.html"
     build.assemble(meta, "", COVER, racing)
