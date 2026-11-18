@@ -35,6 +35,7 @@ Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (file missing, no
 """
 import argparse
 import difflib
+import errno
 import hashlib
 import html
 import os
@@ -447,7 +448,7 @@ class DeckHead(HTMLParser):
             self.title += data
 
 
-def extract(deck_path, out_path):
+def extract(deck_path, out_path, *, overwrite=True):
     t = read_source(deck_path)
     m = REGION.search(t)
     if not m:
@@ -471,8 +472,23 @@ def extract(deck_path, out_path):
     cm = CUSTOM.search(t)
     if cm:
         src += "<style>\n%s\n</style>\n" % cm.group(1).strip()
-    with staged_html(out_path, src + "\n" + body + "\n") as staged:
-        staged.replace(out_path)
+    with staged_html(out_path, src + "\n" + body + "\n") as staged, deck_lock(out_path):
+        if overwrite:
+            staged.replace(out_path)
+        elif os.name == "nt":
+            # Windows rename refuses to replace an existing destination.
+            staged.rename(out_path)
+        else:
+            try:
+                os.link(staged, out_path)
+            except OSError as e:
+                if e.errno not in (errno.ENOTSUP, errno.EOPNOTSUPP, errno.EPERM):
+                    raise
+                # Some removable filesystems lack hard links. Cooperating extractors
+                # still serialize the final existence check and rename under deck_lock.
+                if os.path.lexists(out_path):
+                    raise FileExistsError(out_path) from e
+                staged.rename(out_path)
     print("Source extracted: %s" % out_path)
 
 
@@ -500,10 +516,14 @@ def main():
         fail("The output path is the same as the source. Pass -o with a different name.")
 
     if a.extract:
-        if out.exists() and not a.out:
+        if not a.out and os.path.lexists(out):
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         try:
-            extract(src, out)
+            extract(src, out, overwrite=bool(a.out))
+        except FileExistsError as e:
+            if a.out:
+                fail("Could not extract to %s: %s" % (out, e))
+            fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         except OSError as e:
             fail("Could not extract to %s: %s" % (out, e))
         return 0
