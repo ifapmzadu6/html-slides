@@ -47,7 +47,7 @@ import wave
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from build import DeckHead
+from build import DeckHead, deck_lock
 from check import CheckError, find_browser, run, setup_console  # noqa: E402
 
 BLOCK = re.compile(r"<!-- VOICE:START -->.*?<!-- VOICE:END -->\n?", re.S)
@@ -672,15 +672,25 @@ def trim_clip(uri, seconds):
     return "data:audio/wav;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def save_voice_data(deck, src, voice_data):
-    data = json.dumps(voice_data, ensure_ascii=False).replace("</", "<\\/")
-    block = '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">%s</script>\n<!-- VOICE:END -->\n' % data
+def save_voice_data(deck, original, voice_data):
+    src = BLOCK.sub("", original)
+    if voice_data is not None:
+        data = json.dumps(voice_data, ensure_ascii=False).replace("</", "<\\/")
+        block = '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">%s</script>\n<!-- VOICE:END -->\n' % data
+        src = src.replace(ENGINE, block + ENGINE, 1)
     with tempfile.NamedTemporaryFile(dir=deck.parent, delete=False) as staged:
         path = pathlib.Path(staged.name)
     try:
-        path.write_text(src.replace(ENGINE, block + ENGINE, 1), encoding="utf-8")
-        shutil.copymode(deck, path)
-        path.replace(deck)
+        path.write_text(src, encoding="utf-8")
+        with deck_lock(deck):
+            try:
+                current = deck.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                current = None
+            if current != original:
+                raise OSError("The deck changed during audio processing. Rerun against the updated deck.")
+            shutil.copymode(deck, path)
+            path.replace(deck)
     finally:
         path.unlink(missing_ok=True)
 
@@ -704,7 +714,12 @@ def main():
     a = ap.parse_args()
 
     deck = pathlib.Path(a.deck).resolve()
-    src = deck.read_text(encoding="utf-8")
+    try:
+        with deck_lock(deck):
+            src = deck.read_text(encoding="utf-8")
+    except OSError as e:
+        print("ERROR: could not read the deck: %s" % e)
+        return 2
     if ENGINE not in src:
         print("ERROR: this HTML was not built by this skill.")
         return 2
@@ -718,9 +733,13 @@ def main():
                 old = json.loads(j.group(1).replace("<\\/", "</"))
             except ValueError:
                 old = {}
-        src = BLOCK.sub("", src)
     if a.remove:
-        deck.write_text(src, encoding="utf-8")
+        try:
+            if m:
+                save_voice_data(deck, src, None)
+        except OSError as e:
+            print("ERROR: could not remove the embedded audio: %s" % e)
+            return 2
         print("Embedded audio removed.")
         return 0
 
@@ -908,7 +927,11 @@ def main():
             if n % 10 == 0:
                 print("  %d / %d" % (n, len(todo)))
 
-    save_voice_data(deck, src, {"voice": key, "label": label, "speed": a.speed, "clips": {t: clips[t] for t in texts}})
+    try:
+        save_voice_data(deck, src, {"voice": key, "label": label, "speed": a.speed, "clips": {t: clips[t] for t in texts}})
+    except OSError as e:
+        print("ERROR: could not save the embedded audio: %s" % e)
+        return 2
     print("Audio embedded: %s (%.1f MB)" % (deck.name, deck.stat().st_size / 1e6))
     if engine == "voicevox":
         print("NOTE: VOICEVOX / AivisSpeech voices usually require a credit when the deck is published (for example \"VOICEVOX:%s\"). Check the terms of use of the voice you chose." % label.split("（")[0])

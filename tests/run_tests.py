@@ -575,6 +575,7 @@ def main():
     voice_data = {"voice": "test", "speed": 1, "clips": {"Hello.": uri, "Other.": uri}}
     add_voice.save_voice_data(trim_deck, original_markup, voice_data)
     before = trim_deck.read_bytes()
+    before_trim = trim_deck.read_text(encoding="utf-8")
     for sentence, end in (("missing", "0.2"), ("Hello.", "nan"), ("Hello.", "0.5"), ("Hello.", "0")):
         with patch.object(sys, "argv", ["add_voice.py", str(trim_deck), "--trim-clip", sentence, end]):
             ok("trim: rejects %s %s without changing the deck" % (sentence, end),
@@ -586,6 +587,33 @@ def main():
     voice_data["clips"]["Hello."] = wav_uri(samples[:200])
     ok("trim: preserves exact PCM frames, all other clips and cache settings", actual == voice_data)
     ok("trim: preserves the player and slides", add_voice.BLOCK.sub("", reviewed) == original_markup)
+
+    # Simulate a real rebuild between sentence discovery and final publication.
+    racing = tmp / "rebuilt-during-synthesis.html"
+    build.assemble(meta, "", COVER, racing)
+    def rebuild_during_synthesis(*args, **kwargs):
+        build.assemble(dict(meta, title="Updated while speaking"), "", COVER, racing)
+        return {"Hello.": wav}
+
+    with patch.object(add_voice.platform, "system", return_value="Darwin"), \
+         patch.object(sys, "argv", ["add_voice.py", str(racing), "--engine", "qwen3"]), \
+         patch.object(add_voice, "qwen3_available", return_value=True), \
+         patch.object(add_voice, "compress", return_value=(wav, "audio/wav")), \
+         patch.object(add_voice, "qwen3_batch_synth", side_effect=rebuild_during_synthesis):
+        status = add_voice.main()
+    updated = racing.read_text(encoding="utf-8")
+    ok("voice: a rebuild during synthesis survives the stale save attempt",
+       status == 2 and "<title>Updated while speaking</title>" in updated and not add_voice.BLOCK.search(updated))
+
+    # A clip-only change must also invalidate a pending edit based on an older deck.
+    for action, data in (("embed", voice_data), ("remove", None)):
+        try:
+            add_voice.save_voice_data(trim_deck, before_trim, data)
+        except OSError as e:
+            ok("voice: stale %s preserves another clip edit" % action,
+               "deck changed" in str(e) and trim_deck.read_text(encoding="utf-8") == reviewed)
+        else:
+            ok("voice: stale %s preserves another clip edit" % action, False)
 
     class _MockKokoroHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):
