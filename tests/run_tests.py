@@ -141,6 +141,8 @@ SELFTEST_JS = r"""
     ok('T: transcript opens and playback pauses', !$('#script').hidden && !playing());
     const totalLines = document.querySelectorAll('.sc-line').length;
     ok('transcript: lists narration sentences', totalLines >= N);
+    const scTs = Array.from(document.querySelectorAll('.sc-slide .sc-ts')).map(e => e.textContent);
+    ok('transcript: shows cumulative chapter timestamps', scTs.length === N && scTs[0] === '0:00' && scTs[1] !== '0:00', scTs.join(', '));
     key('/');
     ok('transcript: / focuses search box', document.activeElement === $('#sc-search'));
     $('#sc-search').value = 'スマホ'; $('#sc-search').dispatchEvent(new Event('input'));
