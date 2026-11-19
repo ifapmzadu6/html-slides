@@ -110,8 +110,14 @@ SELFTEST_JS = r"""
     const capS2First = cap();
     key('ArrowDown'); await sleep(400);
     ok('down arrow while playing: advances to the next sentence on the same slide', cur() === 2 && playing() && cap() !== capS2First, cap());
+    const capS2Second = cap();
+    key('r'); await sleep(400);
+    ok('R while playing: replays the current sentence', cur() === 2 && playing() && cap() === capS2Second, cap());
     key('ArrowUp'); await sleep(400);
     ok('up arrow while playing: returns to the previous sentence on the same slide', cur() === 2 && playing() && cap() === capS2First, cap());
+    key('4'); await sleep(150);
+    ok('digit key: jumps directly to slide 4', cur() === 4 && playing());
+    key('2'); await sleep(150);
     await sleep(45000);
     ok('auto-advance: moved on to a later slide', cur() > 2 && playing(), 'slide ' + cur());
     ok('auto-advance: no "speaking" highlight left on earlier slides', document.querySelectorAll('#stage .slide:not(.active) .speaking').length === 0);

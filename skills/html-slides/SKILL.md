@@ -128,6 +128,8 @@ A slide is a fixed 1280×720px canvas that is scaled as a whole to fit the scree
 | Play / pause | Space, or click | tap |
 | Previous / next slide | ← → | swipe left / right |
 | Previous / next sentence (playing) | ↑ ↓ | — |
+| Replay current sentence (playing) | R | — |
+| Jump to slide | `1`–`9` (or 2 digits) | progress bar |
 | Full screen | F | turn the phone sideways |
 | All slides | G (Esc closes) | the grid button at the bottom |
 | Transcript | T (Esc closes) | the list button at the bottom |
