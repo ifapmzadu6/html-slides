@@ -235,7 +235,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.title::before, .slide.end::before { content: ""; display: var(--deco-display); position: absolute; right: -140px; top: -140px; width: 520px; height: 520px; border-radius: 50%; background: var(--accent); opacity: .14; }
 .slide.title::after, .slide.end::after { content: ""; display: var(--deco-display); position: absolute; right: 120px; bottom: 60px; width: 200px; height: 200px; border-radius: 50%; background: var(--accent-2); opacity: .22; }
 .slide.title .sub, .slide.end .sub { font-size: 36px; color: var(--muted); }
-.slide.section { justify-content: center; gap: 20px; background: var(--section-bg); color: var(--section-fg); }
+.slide.section { justify-content: center; gap: 20px; background: var(--section-bg); background: linear-gradient(135deg, var(--section-bg), color-mix(in srgb, var(--section-bg) 82%, #000)); color: var(--section-fg); }
 .slide.section h2 { font-size: 72px; border: 0; padding: 0; }
 .slide.section .kicker, .slide.section .sub { color: var(--section-fg); opacity: .85; }
 .slide.section .sub { font-size: 34px; }
@@ -261,7 +261,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
 /* quote, table, figure, code */
 .slide blockquote { position: relative; font-size: 46px; line-height: 1.5; font-weight: 700; padding: 10px 0 10px 96px; }
-.slide blockquote::before { content: "“"; position: absolute; left: 0; top: -34px; font-size: 180px; line-height: 1; color: var(--accent); font-family: Georgia, serif; }
+.slide blockquote::before { content: "“"; position: absolute; left: 0; top: -34px; font-size: 180px; line-height: 1; color: var(--accent); opacity: .32; font-family: Georgia, serif; }
 .slide blockquote + .note, .slide cite { padding-left: 96px; font-style: normal; }
 .slide table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 28px; line-height: 1.35; }
 .slide th, .slide td { padding: 16px 20px; text-align: left; border-bottom: 2px solid var(--line); }
@@ -941,10 +941,11 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   slides.forEach(function (s, i) {
     var b = document.createElement('button'); b.type = 'button'; b.style.flexGrow = Math.max(1, Math.round(slideDur[i] / 1000));
     var lbl = s.getAttribute('aria-label');
-    b.setAttribute('aria-label', tr('goto').replace('{n}', i + 1)); b.title = lbl;
+    var tip = lbl + ' · ' + fmtClock(slideDur[i]);
+    b.setAttribute('aria-label', tr('goto').replace('{n}', i + 1)); b.title = tip;
     b.innerHTML = '<span><i></i></span>'; b.addEventListener('click', function () { hideBarTip(); go(i); });
-    b.addEventListener('mouseenter', function () { showBarTip(b, lbl); });
-    b.addEventListener('focus', function () { showBarTip(b, lbl); });
+    b.addEventListener('mouseenter', function () { showBarTip(b, tip); });
+    b.addEventListener('focus', function () { showBarTip(b, tip); });
     b.addEventListener('mouseleave', hideBarTip);
     b.addEventListener('blur', hideBarTip);
     bar.appendChild(b); barBtns.push(b); fills.push($('i', b));

@@ -332,6 +332,9 @@ def main():
     bom = tmp / "bom.slides.html"
     bom.write_bytes(b"\xef\xbb\xbf" + starter.read_bytes())
     ok("lint: reads a source that starts with a BOM", not errors(build.lint(build.read_source(bom))[3]))
+    typo_meta = '<!--\ntitle: t\nthme: dark\n-->\n<section class="slide title"><h1 data-say="Hello.">x</h1></section>'
+    typo_issues = build.lint(typo_meta)[3]
+    ok("lint: warns on unknown setting typo with suggestion", any(i["type"] == "unknown-setting" and i["level"] == "warn" and "theme" in i["hint"] for i in typo_issues), typo_issues)
     mixed = "本当ですか！？はい。「そうです。」 It works. Yes!"
     ok("sentence splitting matches the player", build.sentences(mixed) == ["本当ですか！？", "はい。", "「そうです。」", "It works.", "Yes!"], build.sentences(mixed))
 

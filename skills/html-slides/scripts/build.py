@@ -330,10 +330,15 @@ def parse_source(text):
     problems = []
     m = HEADER.match(text)
     if m and re.search(r"^\s*(title|theme|lang|density|footer)\s*:", m.group(1), re.M):
-        for line in m.group(1).splitlines():
+        for offset, line in enumerate(m.group(1).splitlines(), 1):
             k, sep, v = line.partition(":")
-            if sep and k.strip().lower() in meta:
-                meta[k.strip().lower()] = v.strip()
+            key = k.strip().lower()
+            if sep and key in meta:
+                meta[key] = v.strip()
+            elif sep and re.fullmatch(r"[a-z][a-z0-9_-]*", key):
+                problems.append({"line": offset, "slide": 0, "type": "unknown-setting", "level": "warn",
+                                 "msg": 'Setting "%s" is not recognised (it has no effect).' % k.strip(),
+                                 "hint": near(key, list(meta.keys())) + "Available settings: " + ", ".join(meta.keys()) + "."})
         body = text[m.end():]
     else:
         body = text
