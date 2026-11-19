@@ -133,6 +133,9 @@ SELFTEST_JS = r"""
     key('g'); document.querySelectorAll('.ov-item')[1].click(); await sleep(300);
     ok('thumbnail click: jumps to slide 2 and resumes', cur() === 2 && playing() && $('#overview').hidden);
     ok('overview closed: thumbnails removed', document.querySelectorAll('.ov-item').length === 0);
+    $('#count').click();
+    ok('slide counter click: opens overview', !$('#overview').hidden && !playing());
+    key('Escape'); await sleep(200);
 
     key('t');
     ok('T: transcript opens and playback pauses', !$('#script').hidden && !playing());
