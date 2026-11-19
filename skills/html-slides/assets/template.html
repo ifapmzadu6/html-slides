@@ -273,8 +273,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
 .slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; border-radius: 14px; }
 .slide figcaption { font-size: 24px; color: var(--muted); }
-.slide pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; background: #0f172a; color: #e2e8f0; padding: 24px 28px; border-radius: 16px; overflow: hidden; white-space: pre-wrap; }
+.slide pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; background: #0f172a; color: #e2e8f0; padding: 24px 28px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, .25); box-shadow: 0 4px 16px rgba(0, 0, 0, .14); overflow: hidden; white-space: pre-wrap; }
 .slide code { font-family: var(--mono); }
+.slide :not(pre) > code { font-size: .9em; padding: .06em .32em; border-radius: .26em; background: var(--accent-soft); }
 .slide .voice { display: none !important; }
 
 /* --- components for business documents (usable on any slide) --- */
@@ -473,9 +474,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   #stage { position: static; transform: none !important; height: auto; overflow: visible; }
   .slide { position: relative; inset: auto; width: 1280px; height: 720px; opacity: 1 !important; visibility: visible !important; break-after: page; page-break-after: always; }
   .with-notes .slide { break-after: auto; page-break-after: auto; }
-  .with-notes .print-notes { display: block; width: 1280px; padding: 28px 64px 36px; background: #fff; color: #1c2333; font: 500 20px/1.65 var(--font); border-top: 2px solid #cbd5e1; break-after: page; page-break-after: always; }
-  .with-notes .print-notes h4 { margin: 0 0 10px; font-size: 16px; color: #475569; letter-spacing: .04em; }
-  .with-notes .print-notes p { margin: 0 0 6px; }
+  .with-notes .print-notes { display: block; width: 1280px; padding: 36px 64px 40px; background: #fff; color: #1c2333; font: 500 20px/1.75 var(--font); border-top: 4px solid var(--accent); break-after: page; page-break-after: always; }
+  .with-notes .print-notes h4 { margin: 0 0 14px; font-size: 16px; font-weight: 800; color: #475569; letter-spacing: .04em; }
+  .with-notes .print-notes p { margin: 0 0 8px; }
   .slide .pending { opacity: 1 !important; transform: none !important; }
   .slide-footer { transform: none !important; }
   #controls, #start, #caption, #toast, #overview, #script, #help { display: none !important; }
@@ -1142,7 +1143,13 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   }
   if (scSearch) {
     scSearch.addEventListener('input', filterScript);
-    scSearch.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeScript(); e.preventDefault(); } });
+    scSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closeScript(); e.preventDefault(); }
+      else if (e.key === 'ArrowDown') {
+        var first = $('.sc-line:not([hidden])', scBody);
+        if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); e.preventDefault(); }
+      }
+    });
   }
   $('#sc-copy').onclick = copyTranscript;
   $('#b-script').onclick = function () { scEl.hidden ? openScript() : closeScript(); };
@@ -1221,7 +1228,20 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     var k = e.key, hit = true;
     if (!hlpEl.hidden) { if (k === 'Escape' || k === '?') { closeHelp(); e.preventDefault(); } return; }
-    if (!scEl.hidden) { if (k === 'Escape' || k === 't' || k === 'T') { closeScript(); e.preventDefault(); } return; }
+    if (!scEl.hidden) {
+      if (k === 'Escape' || k === 't' || k === 'T') { closeScript(); e.preventDefault(); return; }
+      if (k === '/' && scSearch) { scSearch.focus(); scSearch.select(); e.preventDefault(); return; }
+      if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Home' || k === 'End') {
+        var lines = $$('.sc-line:not([hidden])', scBody), li = lines.indexOf(document.activeElement);
+        if (lines.length) {
+          var nli = k === 'Home' ? 0 : k === 'End' ? lines.length - 1 : (li < 0 ? 0 : li + (k === 'ArrowDown' ? 1 : -1));
+          nli = Math.max(0, Math.min(lines.length - 1, nli));
+          lines[nli].focus(); lines[nli].scrollIntoView({ block: 'nearest' });
+          e.preventDefault();
+        }
+      }
+      return;
+    }
     if (!ovEl.hidden) {
       if (k === 'Escape' || k === 'g' || k === 'G') { closeOverview(); e.preventDefault(); return; }
       if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'Home' || k === 'End') {
