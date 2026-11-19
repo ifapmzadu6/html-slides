@@ -138,9 +138,13 @@ SELFTEST_JS = r"""
     ok('T: transcript opens and playback pauses', !$('#script').hidden && !playing());
     const totalLines = document.querySelectorAll('.sc-line').length;
     ok('transcript: lists narration sentences', totalLines >= N);
+    key('/');
+    ok('transcript: / focuses search box', document.activeElement === $('#sc-search'));
     $('#sc-search').value = 'スマホ'; $('#sc-search').dispatchEvent(new Event('input'));
     const filteredLines = document.querySelectorAll('.sc-line:not([hidden])').length;
     ok('transcript search: filters sentences', filteredLines > 0 && filteredLines < totalLines, filteredLines + '/' + totalLines);
+    $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    ok('transcript search: ArrowDown focuses first matching line', document.activeElement && document.activeElement.classList.contains('sc-line'));
     key('Escape'); await sleep(300);
     ok('Esc: transcript closes and playback resumes', $('#script').hidden && playing());
     key('t'); document.querySelectorAll('.sc-slide')[2].click(); await sleep(300);
