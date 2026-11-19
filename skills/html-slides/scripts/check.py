@@ -4,6 +4,7 @@
 build.py calls this automatically, so there is normally no need to run it directly. Standalone use:
   python3 check.py deck.html                 # check only
   python3 check.py deck.html --shots outdir  # also save a PNG of every slide (1280x720) and two phone views
+  python3 check.py deck.html --pdf deck.pdf  # also export as PDF (add --pdf-notes for speaker notes)
 
 Uses headless Chrome / Edge / Chromium. If none is found, set the CHROME environment variable to its path.
 Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (no browser, ...)
@@ -160,6 +161,25 @@ def shots(rep, outdir):
     return out, dense
 
 
+def export_pdf(rep, out_path, notes=False):
+    """Export the deck as a PDF using headless Chrome/Edge (with optional speaker notes)."""
+    out = pathlib.Path(out_path).resolve()
+    browser = rep["browser"]
+    url = rep["deck"].as_uri() + ("?notes=1" if notes else "")
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=out.parent) as temp:
+            tmp = pathlib.Path(temp) / "export.pdf"
+            result = run(browser, ["--no-pdf-header-footer", "--virtual-time-budget=3000",
+                                   "--print-to-pdf=" + str(tmp), url])
+            if result.returncode or not tmp.is_file() or not tmp.stat().st_size:
+                raise CheckError("%s could not be saved. %s" % (out.name, result.stderr[-500:]))
+            tmp.replace(out)
+    except OSError as e:
+        raise CheckError("Could not write PDF to %s: %s" % (out, e)) from e
+    return out
+
+
 def report(rep, lines=None, extra=None):
     """Print the report. `lines` maps each slide to its source line. Returns True when there are errors."""
     issues = list(extra or []) + rep.get("issues", [])
@@ -202,6 +222,8 @@ def main():
     ap = argparse.ArgumentParser(description="Render a built deck and check it")
     ap.add_argument("deck")
     ap.add_argument("--shots", metavar="DIR", help="folder to save screenshots in")
+    ap.add_argument("--pdf", metavar="FILE", help="export the deck as a PDF file")
+    ap.add_argument("--pdf-notes", action="store_true", help="include speaker notes in the exported PDF")
     a = ap.parse_args()
     try:
         rep = inspect(a.deck)
@@ -216,6 +238,13 @@ def main():
             print("Screenshots could not be saved: %s" % e)
             return 1 if bad else 2
         print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (out, dense))
+    if a.pdf:
+        try:
+            pdf_out = export_pdf(rep, a.pdf, notes=a.pdf_notes)
+        except CheckError as e:
+            print("PDF could not be saved: %s" % e)
+            return 1 if bad else 2
+        print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if a.pdf_notes else ""))
     return 1 if bad else 0
 
 
