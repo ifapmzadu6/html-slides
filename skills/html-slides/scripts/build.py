@@ -47,6 +47,7 @@ import shutil
 import sys
 import tempfile
 import time
+import webbrowser
 from contextlib import contextmanager
 from html.parser import HTMLParser
 
@@ -565,6 +566,7 @@ def main():
     ap.add_argument("--no-render", "--no-check", dest="no_render", action="store_true", help="skip the browser check (lint and assemble only)")
     ap.add_argument("--extract", action="store_true", help="recover the source from a built deck")
     ap.add_argument("--watch", action="store_true", help="rebuild automatically whenever the source file changes")
+    ap.add_argument("--open", action="store_true", help="open the built deck in the default browser")
     a = ap.parse_args()
 
     src = pathlib.Path(a.source).resolve()
@@ -587,6 +589,8 @@ def main():
             fail("--pdf cannot be combined with --extract.")
         if a.script:
             fail("--script cannot be combined with --extract.")
+        if a.open:
+            fail("--open cannot be combined with --extract.")
         if not a.out and os.path.lexists(out):
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         try:
@@ -605,6 +609,8 @@ def main():
         fail("--script cannot be combined with --no-render (script export requires headless Chrome/Edge).")
 
     status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script)
+    if a.open and out.is_file():
+        webbrowser.open(out.as_uri())
     if not a.watch:
         return status
     print("Watching %s for changes (Ctrl+C to stop)..." % src.name, flush=True)
