@@ -394,7 +394,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #bar button i { display: block; height: 100%; width: 0; background: #fff; transition: width .12s linear; }
 #bar button:hover span, #bar button:focus-visible span { height: 9px; margin-top: -1.5px; background: rgba(255,255,255,.65); }
 #btns { display: flex; align-items: center; gap: 2px; }
-#btns button { width: 44px; height: 40px; border: 0; background: none; color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font: 700 14px/1 var(--font); flex: none; }
+#btns button { width: 44px; height: 40px; border: 0; background: none; color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font: 700 14px/1 var(--font); flex: none; transition: background .15s, opacity .15s; }
 #btns #b-rate { width: auto; min-width: 44px; padding: 0 8px; }
 #btns button:hover { background: rgba(255,255,255,.16); }
 #btns button:focus-visible, #bar button:focus-visible, #start button:focus-visible { outline: 3px solid #fff; outline-offset: 1px; }
@@ -416,7 +416,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #start-play { width: clamp(84px, 13vw, 132px); height: clamp(84px, 13vw, 132px); border-radius: 50%; border: 0; background: #fff; color: #111; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 40px rgba(0,0,0,.5); transition: transform .15s; }
 #start-play:hover { transform: scale(1.06); }
 #start-play svg { width: 48%; height: 48%; fill: currentColor; margin-left: 6%; }
-#start-silent { border: 1px solid rgba(255,255,255,.55); background: none; color: #fff; padding: 10px 20px; border-radius: 999px; cursor: pointer; font: 500 clamp(13px, 1.5vw, 16px) var(--font); }
+#start-silent { border: 1px solid rgba(255,255,255,.55); background: none; color: #fff; padding: 10px 20px; border-radius: 999px; cursor: pointer; font: 500 clamp(13px, 1.5vw, 16px) var(--font); transition: background .15s, border-color .15s; }
+#start-silent:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.85); }
 #start-hint { font-size: 13px; opacity: .7; display: none; }
 #start-keys { font-size: 12px; opacity: .55; letter-spacing: .02em; display: none; }
 @media (orientation: portrait) and (max-width: 640px) { #start-hint { display: block; } }
@@ -1135,12 +1136,15 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   if (!fsEnabled) $('#b-full').style.display = 'none';
 
   /* ---------- slide overview ---------- */
-  var ovEl = $('#overview'), ovGrid = $('#ov-grid'), ovResume = false;
+  var ovEl = $('#overview'), ovGrid = $('#ov-grid'), ovResume = false, modalFocus = null;
+  function saveFocus() { var a = document.activeElement; if (a && a !== document.body && a.focus) modalFocus = a; }
+  function restoreFocus() { var a = modalFocus; modalFocus = null; if (a && document.contains(a)) { try { a.focus({ preventScroll: true }); } catch (e) {} } }
   function ovScale() { $$('.ov-item', ovGrid).forEach(function (b) { $('.ov-frame', b).style.transform = 'scale(' + (b.clientWidth / W) + ')'; }); }
   function openOverview() {
     if (!ovEl.hidden) return;
     if (!scEl.hidden) closeScript(true);
     if (!hlpEl.hidden) closeHelp(true);
+    saveFocus();
     ovResume = playing; if (playing) pause();
     ovGrid.innerHTML = '';
     slides.forEach(function (s, i) {
@@ -1161,7 +1165,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function closeOverview(silent) {
     if (ovEl.hidden) return;
     ovEl.hidden = true; stage.inert = false; $('#controls').inert = false; ovGrid.innerHTML = '';
-    if (!silent && ovResume) play();
+    if (!silent) { restoreFocus(); if (ovResume) play(); }
     ovResume = false;
   }
   /* ---------- transcript panel ---------- */
@@ -1225,6 +1229,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (!scEl.hidden) return;
     if (!ovEl.hidden) closeOverview(true);
     if (!hlpEl.hidden) closeHelp(true);
+    saveFocus();
     scResume = playing; if (playing) pause();
     scBody.innerHTML = '';
     if (scSearch) scSearch.value = '';
@@ -1257,7 +1262,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function closeScript(silent) {
     if (scEl.hidden) return;
     scEl.hidden = true; stage.inert = false; $('#controls').inert = false; scBody.innerHTML = '';
-    if (!silent && scResume) play();
+    if (!silent) { restoreFocus(); if (scResume) play(); }
     scResume = false;
   }
   if (scSearch) {
@@ -1291,6 +1296,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (!hlpEl.hidden) return;
     if (!ovEl.hidden) closeOverview(true);
     if (!scEl.hidden) closeScript(true);
+    saveFocus();
     hlpResume = playing; if (playing) pause();
     hlpEl.hidden = false; stage.inert = true; $('#controls').inert = true;
     $('#hlp-close').focus();
@@ -1298,7 +1304,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function closeHelp(silent) {
     if (hlpEl.hidden) return;
     hlpEl.hidden = true; stage.inert = false; $('#controls').inert = false;
-    if (!silent && hlpResume) play();
+    if (!silent) { restoreFocus(); if (hlpResume) play(); }
     hlpResume = false;
   }
   $('#hlp-close').onclick = function () { closeHelp(); };
@@ -1376,7 +1382,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       return;
     }
     if (k >= '0' && k <= '9') {
-      if (!jumpBuf && k === '0') return;
+      if (!jumpBuf && k === '0') { go(0); e.preventDefault(); poke(); return; }
       clearTimeout(jumpTimer);
       var nextBuf = jumpBuf + k, num = parseInt(nextBuf, 10);
       if (num > slides.length) {

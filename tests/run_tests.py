@@ -117,6 +117,8 @@ SELFTEST_JS = r"""
     ok('up arrow while playing: returns to the previous sentence on the same slide', cur() === 2 && playing() && cap() === capS2First, cap());
     key('4'); await sleep(150);
     ok('digit key: jumps directly to slide 4', cur() === 4 && playing());
+    key('0'); await sleep(150);
+    ok('0 key: jumps back to slide 1', cur() === 1 && playing());
     key('2'); await sleep(150);
     await sleep(45000);
     ok('auto-advance: moved on to a later slide', cur() > 2 && playing(), 'slide ' + cur());
