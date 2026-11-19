@@ -231,6 +231,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 /* cover, section divider, closing slide */
 .slide.title, .slide.end { justify-content: center; align-items: flex-start; gap: 24px; background: linear-gradient(135deg, var(--accent-soft), var(--bg) 60%); }
 :root:where([data-theme="corporate"]) .slide.title, :root:where([data-theme="corporate"]) .slide.end { box-shadow: inset 18px 0 0 var(--accent), inset 24px 0 0 var(--bar-color); }
+:root:where([data-theme="mono"]) .slide.title, :root:where([data-theme="mono"]) .slide.end { box-shadow: inset 18px 0 0 var(--accent), inset 24px 0 0 var(--accent-2); }
 .slide.title::before, .slide.end::before { content: ""; display: var(--deco-display); position: absolute; right: -140px; top: -140px; width: 520px; height: 520px; border-radius: 50%; background: var(--accent); opacity: .14; }
 .slide.title::after, .slide.end::after { content: ""; display: var(--deco-display); position: absolute; right: 120px; bottom: 60px; width: 200px; height: 200px; border-radius: 50%; background: var(--accent-2); opacity: .22; }
 .slide.title .sub, .slide.end .sub { font-size: 36px; color: var(--muted); }
@@ -620,10 +621,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       play: 'Play', pause: 'Pause', playPause: 'Play / pause', prev: 'Previous slide', next: 'Next slide',
       voice: 'Narration voice', rate: 'Playback speed', sound: 'Sound on / off', captions: 'Captions on / off', transcript: 'Transcript',
       copy: 'Copy', copied: 'Transcript copied', searchPlaceholder: 'Filter transcript...', shortcuts: 'Keyboard shortcuts',
-      prevNextSentence: 'Previous / next sentence (playing)', jumpSlide: 'Jump to slide 1–9',
+      prevNextSentence: 'Previous / next sentence (playing)', replaySentence: 'Replay current sentence (playing)', jumpSlide: 'Jump to slide (1–99)',
       overview: 'All slides', closeOverview: 'Close', fullscreen: 'Full screen',
       silent: 'Play without sound (captions only)', rotate: 'Rotate your phone for a larger view', replay: 'Play again',
-      slide: 'slide', goto: 'Go to slide {n}', meta: '{n} slides · {t}', aboutSec: 'about {n} sec', aboutMin: 'about {n} min',
+      slide: 'slide', goto: 'Go to slide {n}', meta: '{n} slides · {t}', metaAudio: '{n} slides · {t} · Audio', aboutSec: 'about {n} sec', aboutMin: 'about {n} min',
       noVoice: 'No on-device voice is available, so the deck continues with captions only',
       ttsFail: 'Narration could not be played, so the deck continues with captions only'
     }
@@ -1027,6 +1028,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function ovScale() { $$('.ov-item', ovGrid).forEach(function (b) { $('.ov-frame', b).style.transform = 'scale(' + (b.clientWidth / W) + ')'; }); }
   function openOverview() {
     if (!ovEl.hidden) return;
+    if (!scEl.hidden) closeScript(true);
+    if (!hlpEl.hidden) closeHelp(true);
     ovResume = playing; if (playing) pause();
     ovGrid.innerHTML = '';
     slides.forEach(function (s, i) {
@@ -1148,7 +1151,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   var hlpEl = $('#help'), hlpList = $('#hlp-list'), hlpResume = false;
   [
     [['Space', 'K'], 'playPause'], [['←', '→'], 'prev'], [['↑', '↓'], 'prevNextSentence'],
-    [['1–9'], 'jumpSlide'], [['<', '>'], 'rate'], [['M'], 'sound'], [['C'], 'captions'],
+    [['R'], 'replaySentence'], [['1–9'], 'jumpSlide'], [['<', '>'], 'rate'], [['M'], 'sound'], [['C'], 'captions'],
     [['T'], 'transcript'], [['G'], 'overview'], [['F'], 'fullscreen'], [['?'], 'shortcuts']
   ].forEach(function (row) {
     var dt = document.createElement('dt');
@@ -1205,6 +1208,13 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('#controls') && ovEl.hidden && scEl.hidden && hlpEl.hidden) { swiped = true; go(cur + (dx < 0 ? 1 : -1)); setTimeout(function () { swiped = false; }, 400); }
   }, { passive: true });
   player.addEventListener('mousemove', poke);
+  var jumpBuf = '', jumpTimer = 0;
+  function commitJump() {
+    clearTimeout(jumpTimer); jumpTimer = 0;
+    var n = parseInt(jumpBuf, 10); jumpBuf = '';
+    if (n >= 1 && n <= slides.length) go(n - 1);
+  }
+  function clearJump() { clearTimeout(jumpTimer); jumpTimer = 0; jumpBuf = ''; }
   document.addEventListener('keydown', function (e) {
     if (e.target.closest && e.target.closest('input,select,textarea')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1212,6 +1222,24 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (!hlpEl.hidden) { if (k === 'Escape' || k === '?') { closeHelp(); e.preventDefault(); } return; }
     if (!scEl.hidden) { if (k === 'Escape' || k === 't' || k === 'T') { closeScript(); e.preventDefault(); } return; }
     if (!ovEl.hidden) { if (k === 'Escape' || k === 'g' || k === 'G') { closeOverview(); e.preventDefault(); } return; }
+    if (k >= '0' && k <= '9') {
+      if (!jumpBuf && k === '0') return;
+      clearTimeout(jumpTimer);
+      var nextBuf = jumpBuf + k, num = parseInt(nextBuf, 10);
+      if (num > slides.length) {
+        var single = parseInt(k, 10);
+        if (single >= 1 && single <= slides.length) { jumpBuf = k; num = single; }
+        else { jumpBuf = ''; return; }
+      } else { jumpBuf = nextBuf; }
+      if (num * 10 > slides.length) commitJump();
+      else jumpTimer = setTimeout(commitJump, 450);
+      e.preventDefault(); poke(); return;
+    }
+    if (jumpBuf) {
+      if (k === 'Enter') { commitJump(); e.preventDefault(); poke(); return; }
+      clearJump();
+      if (k === 'Escape') { e.preventDefault(); return; }
+    }
     if (k === 'g' || k === 'G') { openOverview(); e.preventDefault(); return; }
     if (k === 't' || k === 'T') { openScript(); e.preventDefault(); return; }
     if (k === '?') { openHelp(); e.preventDefault(); return; }
@@ -1220,7 +1248,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace' || k === 'p' || k === 'P') go(cur - 1);
     else if (k === 'ArrowUp' && playing) jumpPart(-1);
     else if (k === 'ArrowDown' && playing) jumpPart(1);
-    else if (k >= '1' && k <= '9') { var idx = parseInt(k, 10) - 1; if (idx < slides.length) go(idx); else hit = false; }
+    else if ((k === 'r' || k === 'R') && playing) restartPart();
     else if (k === 'Home') go(0);
     else if (k === 'End') go(slides.length - 1);
     else if (k === 'f' || k === 'F') fullscreen();
@@ -1294,7 +1322,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
   /* ---------- start-up ---------- */
   $('#start-title').textContent = document.title;
-  $('#start-meta').textContent = tr('meta').replace('{n}', slides.length).replace('{t}', fmt(totalDur));
+  $('#start-meta').textContent = tr(hasClips ? 'metaAudio' : 'meta').replace('{n}', slides.length).replace('{t}', fmt(totalDur));
   var h = parseInt((location.hash || '').replace('#', ''), 10);
   showSlide(h > 0 ? h - 1 : 0, true);
   if (STILL) startEl.hidden = true;
