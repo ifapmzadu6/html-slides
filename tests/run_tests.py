@@ -366,6 +366,10 @@ def main():
     pdf_notes = tmp / "starter-notes.pdf"
     check.export_pdf(rep, pdf_notes, notes=True)
     ok("pdf export with notes: writes a larger PDF file", pdf_notes.is_file() and pdf_notes.read_bytes().startswith(b"%PDF-") and pdf_notes.stat().st_size > pdf_plain.stat().st_size)
+    md_script = tmp / "starter-script.md"
+    check.export_script(rep, md_script)
+    md_text = md_script.read_text(encoding="utf-8")
+    ok("script export: writes Markdown headings and narration lines", md_text.startswith("# ") and md_text.count("\n## ") == rep["slides"] and "- " in md_text)
     for theme in build.THEMES:
         d = tmp / ("theme-%s.html" % theme)
         build.assemble(dict(meta, theme=theme), css, slides, d)

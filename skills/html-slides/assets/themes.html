@@ -7,9 +7,10 @@
 <style>
 body { margin: 0; padding: 24px; background: #e9ebef; color: #1c2333; font: 16px/1.6 "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", "Hiragino Sans", sans-serif; }
 h1 { font-size: 24px; margin: 0 0 4px; } p { margin: 0 0 20px; color: #555; }
-.row { margin-bottom: 26px; } .row h2 { font-size: 17px; margin: 0 0 8px; } .row h2 code { background: #1c2333; color: #fff; padding: 2px 10px; border-radius: 6px; margin-right: 10px; font-size: 15px; }
+.row { margin-bottom: 26px; } .row h2 { font-size: 17px; margin: 0 0 8px; } .row h2 code { background: #1c2333; color: #fff; padding: 2px 10px; border-radius: 6px; margin-right: 10px; font-size: 15px; cursor: pointer; transition: background .15s; } .row h2 code:hover { background: #2563eb; } .row h2 code.copied { background: #15803d; }
 .shots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.shot { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.18); background: #000; }
+.shot { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.18); background: #000; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.shot:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.26); }
 .shot iframe { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; border: 0; transform-origin: 0 0; pointer-events: none; }
 @media (max-width: 700px) { .shots { grid-template-columns: repeat(2, 1fr); } }
 </style>
@@ -30,6 +31,21 @@ h1 { font-size: 24px; margin: 0 0 4px; } p { margin: 0 0 20px; color: #555; }
 <script>
 function fit() { document.querySelectorAll('.shot').forEach(function (s) { s.firstElementChild.style.transform = 'scale(' + (s.clientWidth / 1280) + ')'; }); }
 window.addEventListener('resize', fit); fit();
+document.querySelectorAll('.row h2 code').forEach(function (c) {
+  var name = c.textContent.trim();
+  c.title = 'Click to copy "theme: ' + name + '"';
+  c.addEventListener('click', function () {
+    var txt = 'theme: ' + name;
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(function () {});
+    c.textContent = 'Copied!'; c.classList.add('copied');
+    setTimeout(function () { c.textContent = name; c.classList.remove('copied'); }, 1100);
+  });
+});
+document.querySelectorAll('.shot').forEach(function (s) {
+  var src = (s.firstElementChild.getAttribute('src') || '').replace('still=1&', '');
+  s.title = 'Open interactive preview';
+  s.addEventListener('click', function () { if (src) window.open(src, '_blank', 'noopener'); });
+});
 </script>
 </body>
 </html>

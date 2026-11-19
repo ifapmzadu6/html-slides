@@ -949,6 +949,15 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       wait(250 / rate, my, step);
     });
   }
+  var wakeLock = null;
+  function setWake(on) {
+    if (!('wakeLock' in navigator) || !navigator.wakeLock) return;
+    if (on) {
+      if (!wakeLock) { try { navigator.wakeLock.request('screen').then(function (wl) { wakeLock = wl; wl.addEventListener('release', function () { if (wakeLock === wl) wakeLock = null; }); }, function () {}); } catch (e) {} }
+    } else if (wakeLock) {
+      var wl = wakeLock; wakeLock = null; try { wl.release().catch(function () {}); } catch (e) {}
+    }
+  }
   function play(silentMode) {
     if (silentMode) { muted = true; store.set('muted', '1'); }
     unlock();
@@ -956,6 +965,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (ended) { ended = false; showSlide(0, false); }
     else if (!mid) showSlide(cur, false);
     playing = true; everPlayed = true; startEl.hidden = true; mid = true;
+    setWake(true);
     clearInterval(progTimer); progTimer = setInterval(function () { if (playing && inPart) updateProgress(); }, 100);
     var my = ++tok; stopSpeech(); updateUI(); poke();
     wait(resume ? 120 : 500, my, step);
@@ -964,12 +974,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var T = timeline[cur];
     audioPausedText = (audio && !audio.paused && audio.currentTime > 0 && !audio.ended && !audioBroken && T[cueIdx] && T[cueIdx].parts[partIdx])
       ? T[cueIdx].parts[partIdx].say : null;
-    playing = false; inPart = false; clearInterval(progTimer); tok++; stopSpeech(); updateUI();
+    playing = false; inPart = false; setWake(false); clearInterval(progTimer); tok++; stopSpeech(); updateUI();
   }
   function toggle() { playing ? pause() : play(); }
   function finish() {
     audioPausedText = null;
-    playing = false; inPart = false; clearInterval(progTimer); ended = true; mid = false; tok++; setCaption('');
+    playing = false; inPart = false; setWake(false); clearInterval(progTimer); ended = true; mid = false; tok++; setCaption('');
     $('#start-meta').textContent = tr('replay');
     startEl.hidden = false; updateUI();
   }
@@ -1392,7 +1402,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     else hit = false;
     if (hit) { e.preventDefault(); poke(); }
   });
-  window.addEventListener('pagehide', stopSpeech);
+  window.addEventListener('pagehide', function () { setWake(false); stopSpeech(); });
   document.addEventListener('visibilitychange', function () { if (document.hidden && playing) pause(); });
 
   /* ---------- layout ---------- */
@@ -1413,8 +1423,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
   /* ---------- check mode (?check=1), read by scripts/check.py ---------- */
   function runCheck() {
-    var rep = { slides: slides.length, totalSec: Math.round(totalDur / 1000), issues: [], texts: [], clips: Object.keys(clips).length };
-    timeline.forEach(function (T) { T.forEach(function (c) { c.parts.forEach(function (p) { if (rep.texts.indexOf(p.say) < 0) rep.texts.push(p.say); }); }); });
+    var rep = { title: document.title, slides: slides.length, totalSec: Math.round(totalDur / 1000), issues: [], texts: [], clips: Object.keys(clips).length, script: [] };
+    timeline.forEach(function (T, si) {
+      var lines = [];
+      T.forEach(function (c) { c.parts.forEach(function (p) { if (rep.texts.indexOf(p.say) < 0) rep.texts.push(p.say); lines.push(p.cap); }); });
+      rep.script.push({ label: slides[si].getAttribute('aria-label') || ((si + 1) + ' / ' + slides.length), sec: Math.round(slideDur[si] / 1000), lines: lines });
+    });
     rep.stats = [];
     if (hasClips) { var miss = rep.texts.filter(function (t) { return !clips[t]; }); if (miss.length) rep.issues.push({ slide: 0, type: 'voice-stale', level: 'warn', msg: miss.length + ' sentence(s) have no embedded audio (rerun add_voice.py after changing the narration): ' + miss[0].slice(0, 30) }); }
     function add(i, type, msg) { rep.issues.push({ slide: i + 1, type: type, msg: msg }); }
