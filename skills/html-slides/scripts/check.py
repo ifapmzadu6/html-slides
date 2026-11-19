@@ -5,6 +5,7 @@ build.py calls this automatically, so there is normally no need to run it direct
   python3 check.py deck.html                 # check only
   python3 check.py deck.html --shots outdir  # also save a PNG of every slide (1280x720) and two phone views
   python3 check.py deck.html --pdf deck.pdf  # also export as PDF (add --pdf-notes for speaker notes)
+  python3 check.py deck.html --script deck.md  # also export the narration script as Markdown
 
 Uses headless Chrome / Edge / Chromium. If none is found, set the CHROME environment variable to its path.
 Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (no browser, ...)
@@ -180,6 +181,25 @@ def export_pdf(rep, out_path, notes=False):
     return out
 
 
+def export_script(rep, out_path):
+    """Export the deck's narration script as Markdown."""
+    out = pathlib.Path(out_path).resolve()
+    title = rep.get("title") or rep["deck"].stem
+    parts = ["# " + title, ""]
+    for item in rep.get("script") or []:
+        sec = int(item.get("sec") or 0)
+        parts.append("## %s (%d:%02d)" % (item.get("label") or "", sec // 60, sec % 60))
+        for line in item.get("lines") or []:
+            parts.append("- " + line)
+        parts.append("")
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("\n".join(parts), encoding="utf-8")
+    except OSError as e:
+        raise CheckError("Could not write script to %s: %s" % (out, e)) from e
+    return out
+
+
 def report(rep, lines=None, extra=None):
     """Print the report. `lines` maps each slide to its source line. Returns True when there are errors."""
     issues = list(extra or []) + rep.get("issues", [])
@@ -224,6 +244,7 @@ def main():
     ap.add_argument("--shots", metavar="DIR", help="folder to save screenshots in")
     ap.add_argument("--pdf", metavar="FILE", help="export the deck as a PDF file")
     ap.add_argument("--pdf-notes", action="store_true", help="include speaker notes in the exported PDF")
+    ap.add_argument("--script", metavar="FILE", help="export the narration script as Markdown")
     a = ap.parse_args()
     try:
         rep = inspect(a.deck)
@@ -245,6 +266,13 @@ def main():
             print("PDF could not be saved: %s" % e)
             return 1 if bad else 2
         print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if a.pdf_notes else ""))
+    if a.script:
+        try:
+            sc_out = export_script(rep, a.script)
+        except CheckError as e:
+            print("Script could not be saved: %s" % e)
+            return 1 if bad else 2
+        print("Script: %s" % sc_out)
     return 1 if bad else 0
 
 

@@ -5,6 +5,7 @@ Usage:
   python3 build.py deck.slides.html                    # lint, build deck.html, render-check it
   python3 build.py deck.slides.html --shots shots      # also save screenshots
   python3 build.py deck.slides.html --pdf deck.pdf     # also export as PDF (add --pdf-notes for speaker notes)
+  python3 build.py deck.slides.html --script deck.md   # also export the narration script as Markdown
   python3 build.py deck.slides.html -o out/deck.html   # choose the output path
   python3 build.py deck.slides.html --no-render        # lint and assemble only (no browser needed)
   python3 build.py --extract deck.html                 # recover the source (deck.slides.html) from a built deck
@@ -499,7 +500,7 @@ def extract(deck_path, out_path, *, overwrite=True):
     print("Source extracted: %s" % out_path)
 
 
-def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False):
+def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None):
     # 1. source lint
     meta, css, slides, issues, lines = lint(read_source(src))
     if any(i["level"] == "error" for i in issues):
@@ -542,6 +543,13 @@ def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=Fal
             print("PDF could not be saved: %s" % e)
             return 1 if bad else 2
         print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if pdf_notes else ""))
+    if script:
+        try:
+            sc_out = check.export_script(rep, script)
+        except check.CheckError as e:
+            print("Script could not be saved: %s" % e)
+            return 1 if bad else 2
+        print("Script: %s" % sc_out)
     return 1 if bad else 0
 
 
@@ -553,6 +561,7 @@ def main():
     ap.add_argument("--shots", metavar="DIR", help="folder to save screenshots in")
     ap.add_argument("--pdf", metavar="FILE", help="export the built deck as a PDF file")
     ap.add_argument("--pdf-notes", action="store_true", help="include speaker notes in the exported PDF")
+    ap.add_argument("--script", metavar="FILE", help="export the narration script as Markdown")
     ap.add_argument("--no-render", "--no-check", dest="no_render", action="store_true", help="skip the browser check (lint and assemble only)")
     ap.add_argument("--extract", action="store_true", help="recover the source from a built deck")
     ap.add_argument("--watch", action="store_true", help="rebuild automatically whenever the source file changes")
@@ -576,6 +585,8 @@ def main():
             fail("--watch cannot be combined with --extract.")
         if a.pdf:
             fail("--pdf cannot be combined with --extract.")
+        if a.script:
+            fail("--script cannot be combined with --extract.")
         if not a.out and os.path.lexists(out):
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         try:
@@ -590,8 +601,10 @@ def main():
 
     if a.pdf and a.no_render:
         fail("--pdf cannot be combined with --no-render (PDF export requires headless Chrome/Edge).")
+    if a.script and a.no_render:
+        fail("--script cannot be combined with --no-render (script export requires headless Chrome/Edge).")
 
-    status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes)
+    status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script)
     if not a.watch:
         return status
     print("Watching %s for changes (Ctrl+C to stop)..." % src.name, flush=True)
@@ -608,7 +621,7 @@ def main():
                 last_sig = sig
                 print("\n--- Rebuilding %s ---" % src.name, flush=True)
                 try:
-                    build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes)
+                    build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script)
                 except SystemExit as e:
                     if e.code:
                         print("(Rebuild error: exit %s)" % e.code, flush=True)
