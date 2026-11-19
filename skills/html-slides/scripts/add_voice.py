@@ -288,11 +288,22 @@ def qwen3_lang_code(voice, text=""):
 
 
 QWEN3_SYMBOL_FIXES = [
-    ("◎", "二重丸"),
-    ("○", "丸"),
-    ("◯", "丸"),
-    ("△", "三角"),
+    ("◎", "にじゅうまる"),
+    ("○", "まる"),
+    ("◯", "まる"),
+    ("△", "さんかく"),
     ("×", "バツ"),
+]
+QWEN3_KANJI_FIXES = [
+    ("二重丸", "にじゅうまる"),
+    ("見積書", "みつもりしょ"),
+    ("稟議", "りんぎ"),
+    ("遅延", "ちえん"),
+    ("未満", "みまん"),
+    ("内訳", "うちわけ"),
+    ("打刻", "だこく"),
+    ("初年度", "しょねんど"),
+    ("初期", "しょき"),
 ]
 _TAGGER = False
 
@@ -370,29 +381,45 @@ def _prep_qwen3_text(s, lang="japanese"):
         # Only quantities with explicit units should acquire 万 or 億.
         s = re.sub(r"(?<![A-Za-z_\d.])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
                    _ja_num_units, s)
+        # Convert 1-4 digit numbers before 円, 万円, 億円 (e.g. 3000円 -> 三千円, 4800万円 -> 四千八百万円) to explicit place-value kanji.
+        s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{0,3})(?=(?:万|億)?円)",
+                   lambda m: _ja_currency_group(int(m.group(1))), s)
         # Preserve the existing kanji decimal notation (e.g. 六・八万円).
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
         s = re.sub(r"てん([二三四五六七八九2-9])日", r"てん\1にち", s)
         s = re.sub(r"(?<![\w\d])[+＋](?=\d)", "プラス", s)
         s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
+        for k, v in QWEN3_KANJI_FIXES:
+            s = s.replace(k, v)
         tagger = _get_tagger()
         if tagger is not None:
             try:
                 import jaconv  # noqa: PLC0415
 
+                words = list(tagger(s))
                 parts = []
-                for w in tagger(s):
+                for idx_w, w in enumerate(words):
                     parts.append(w.white_space)
                     surf = w.surface
                     kana = getattr(w.feature, "kana", None)
-                    # Expand 1-kanji verbs with implicit geminate 'っ' (e.g. 達し -> たっし, 発し -> はっし) so 'っ' is never dropped.
-                    if w.feature.pos1 == "動詞" and kana and "ッ" in kana and "っ" not in surf and "ッ" not in surf:
+                    next_pos = words[idx_w + 1].feature.pos1 if idx_w + 1 < len(words) else None
+                    # Expand 1-kanji verbs with implicit geminate 'っ' (e.g. 達し -> たっし, 発し -> はっし) so 'っ' is never dropped,
+                    # and disambiguate 見積 (みつもり) and adnominal 主な (おもな) before a noun without touching 持ち主なのに.
+                    if (
+                        (w.feature.pos1 == "動詞" and kana and "ッ" in kana and "っ" not in surf and "ッ" not in surf)
+                        or surf == "見積"
+                        or (surf == "主な" and w.feature.pos1 == "連体詞" and next_pos == "名詞")
+                    ):
                         parts.append(jaconv.kata2hira(kana))
                     else:
                         parts.append(surf)
                 s = "".join(parts)
             except Exception:
-                pass
+                s = re.sub(r"見積(?!も)", "みつもり", s)
+                s = re.sub(r"(?:^|(?<=[、。！？\sはがをにでともへ]))主な(?!の|で|ら)", "おもな", s)
+        else:
+            s = re.sub(r"見積(?!も)", "みつもり", s)
+            s = re.sub(r"(?:^|(?<=[、。！？\sはがをにでともへ]))主な(?!の|で|ら)", "おもな", s)
     for k, v in QWEN3_SYMBOL_FIXES:
         s = s.replace(k, v)
     if s and s[-1] not in "。！？!?.":
@@ -512,18 +539,19 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         hi = min(len(all_texts), lo + 3)
         synth_list = list(all_texts[lo:hi])
 
-    # Group into batches of up to 2000 sentences / ~50000 chars (with max_tokens=81920)
-    # so even very large decks are synthesized in a single continuous take.
+    # Keep normal decks in a single continuous take (up to 20 sentences / ~700 chars, ~90s of audio)
+    # because longer takes can cause Qwen3-TTS hallucinations or ForcedAligner saturation.
+    # Split longer decks evenly so every batch has balanced prosodic context, and bisect on alignment failure.
+    max_sents, max_chars = 20, 700
+    total_chars = sum(len(t) for t in synth_list)
+    n_batches = max(1, math.ceil(len(synth_list) / max_sents), math.ceil(total_chars / max_chars))
     batches = []
-    cur_b, cur_chars = [], 0
-    for t in synth_list:
-        if cur_b and (len(cur_b) >= 2000 or cur_chars + len(t) > 50000):
-            batches.append(cur_b)
-            cur_b, cur_chars = [], 0
-        cur_b.append(t)
-        cur_chars += len(t)
-    if cur_b:
-        batches.append(cur_b)
+    start = 0
+    for i in range(n_batches):
+        end = round((i + 1) * len(synth_list) / n_batches)
+        if end > start:
+            batches.append(synth_list[start:end])
+            start = end
 
     out = {}
     lang = lang or qwen3_lang_code(voice, " ".join(texts))
@@ -533,7 +561,9 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         "german": "Eins, zwei, drei.", "spanish": "Uno, dos, tres.", "french": "Un, deux, trois.",
         "italian": "Uno, due, tre.", "portuguese": "Um, dois, três.", "russian": "Один, два, три.",
     }.get(lang, "One, two, three.")
-    for batch in batches:
+    queue = list(batches)
+    while queue:
+        batch = queue.pop(0)
         if cache["aligner"] is None:
             for t in batch:
                 out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature, lang=lang)
@@ -577,11 +607,23 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                     idx += 1
                 if cur_len < target:
                     raise ValueError("incomplete sentence alignment")
-                spans.append((items[start_i].start_time, items[idx - 1].end_time))
+                t0, t1 = items[start_i].start_time, items[idx - 1].end_time
+                min_dur = max(0.15, target * 0.065) / max(1.0, speed)
+                max_dur = max(12.0, target * 0.55) / min(1.0, speed)
+                if t1 - t0 < min_dur:
+                    raise ValueError("collapsed sentence alignment")
+                if t1 - t0 > max_dur:
+                    raise ValueError("runaway sentence alignment")
+                spans.append((t0, t1))
+            max_gap = 4.5 / min(1.0, speed)
+            for k in range(len(batch)):
+                if spans[k + 1][0] - spans[k][1] > max_gap:
+                    raise ValueError("excessive inter-sentence gap")
             samples_list = audio.tolist()
             cuts = [0]
             for k in range(len(batch)):
                 cuts.append(_min_energy_cut(samples_list, sr, spans[k][1], spans[k + 1][0]))
+            batch_out = {}
             for k, s in enumerate(batch):
                 # Window around each sentence's aligned [start - 45ms, end + 450ms] bounded by neighbour cuts
                 # so inter-sentence breaths in the \n gap are discarded while trailing devoiced 'す/ます/です' is kept intact.
@@ -592,10 +634,14 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 seg = clean_speech(samples_list[i0:i1], sr, threshold=0.0015)
                 if not seg:
                     raise ValueError("empty segment after alignment")
-                out[s] = pcm_to_wav(seg, sr)
+                batch_out[s] = pcm_to_wav(seg, sr)
+            out.update(batch_out)
         except Exception:
-            for t in batch:
-                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature, lang=lang)
+            if len(batch) > 1:
+                mid = len(batch) // 2
+                queue[0:0] = [batch[:mid], batch[mid:]]
+            else:
+                out[batch[0]] = qwen3_synth(batch[0], voice, speed, model_id, cache, instruct, temperature, lang=lang)
     return out
 
 
@@ -617,6 +663,16 @@ def say_synth(text, voice, speed, tmp):
         cmd += ["-v", voice]
     subprocess.run(cmd + ["--", text], check=True, capture_output=True)
     return out.read_bytes(), ".aiff"
+
+
+def wav_duration(raw):
+    """Return WAV duration in seconds, or None if not a readable WAV payload."""
+    try:
+        with wave.open(io.BytesIO(raw), "rb") as wf:
+            rate = wf.getframerate()
+            return round(wf.getnframes() / rate, 2) if rate > 0 else None
+    except (wave.Error, EOFError, OSError):
+        return None
 
 
 def compress(raw, ext, tmp):
@@ -744,6 +800,8 @@ def main():
             return 2
         try:
             clips[sentence] = trim_clip(clips[sentence], float(end))
+            if isinstance(old.get("durations"), dict):
+                old["durations"][sentence] = round(float(end), 2)
             save_voice_data(deck, src, old)
         except (ValueError, EOFError, wave.Error, OSError, subprocess.CalledProcessError) as e:
             print("ERROR: could not trim the clip: %s" % e)
@@ -851,7 +909,7 @@ def main():
         if windows_qwen and not (0 < a.speed < float("inf")):
             print("ERROR: --speed must be a finite number greater than zero.")
             return 2
-        version = "v6" if lang in ("japanese", None) else "v3"
+        version = "v7" if lang in ("japanese", None) else "v4"
         if windows_qwen:
             version += "-torch"
         key = "qwen3:%s:%s:%s:%s:%s:%s" % (version, lang or "infer", a.model, label, a.instruct or "",
@@ -884,7 +942,9 @@ def main():
     texts = json.loads(html.unescape(rep.group(1)))["texts"]
 
     reuse = old.get("clips", {}) if (old.get("voice"), old.get("speed")) == (key, a.speed) else {}
+    reuse_durs = old.get("durations", {}) if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("durations"), dict) else {}
     clips = {t: reuse[t] for t in texts if t in reuse}
+    durations = {t: reuse_durs[t] for t in texts if t in reuse_durs}
     todo = [t for t in texts if t not in clips]
     print("%d sentences, %d to generate, voice: %s (generated on this computer)" % (len(texts), len(todo), label))
     kokoro_pipelines = {}
@@ -915,13 +975,20 @@ def main():
                 print("Audio could not be generated: %s (%s)" % (t[:30], e))
                 print("The HTML was not changed.")
                 return 1
+            if ext == ".wav":
+                dur = wav_duration(raw)
+                if dur is not None:
+                    durations[t] = dur
             data, mime = compress(raw, ext, tmp)
             clips[t] = "data:%s;base64,%s" % (mime, base64.b64encode(data).decode("ascii"))
             if n % 10 == 0:
                 print("  %d / %d" % (n, len(todo)))
 
     try:
-        save_voice_data(deck, src, {"voice": key, "label": label, "speed": a.speed, "clips": {t: clips[t] for t in texts}})
+        payload = {"voice": key, "label": label, "speed": a.speed, "clips": {t: clips[t] for t in texts}}
+        if durations:
+            payload["durations"] = {t: durations[t] for t in texts if t in durations}
+        save_voice_data(deck, src, payload)
     except OSError as e:
         print("ERROR: could not save the embedded audio: %s" % e)
         return 2

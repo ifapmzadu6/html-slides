@@ -80,8 +80,15 @@ SELFTEST_JS = r"""
     key('End'); ok('End: last slide', cur() === N);
     key('ArrowRight'); ok('right arrow on the last slide: stays', cur() === N);
     key('Home'); ok('Home: first slide', cur() === 1);
+    key('3'); ok('digit 3: jumps directly to slide 3', cur() === 3);
+    key('1'); ok('digit 1: jumps directly to slide 1', cur() === 1);
     key('ArrowLeft'); ok('left arrow on the first slide: stays', cur() === 1);
     ok('slide counter', $('#count').textContent.replace(/\s/g, '') === '1/' + N, $('#count').textContent);
+    ok('time display', /^\d+:\d\d \/ \d+:\d\d$/.test($('#time').textContent.trim()), $('#time').textContent);
+    document.querySelectorAll('#bar button')[1].dispatchEvent(new MouseEvent('mouseenter'));
+    ok('progress bar tooltip: shows slide label on hover', $('#bar-tip').classList.contains('show') && $('#bar-tip').textContent.indexOf('2 / ' + N) === 0, $('#bar-tip').textContent);
+    document.querySelectorAll('#bar button')[1].dispatchEvent(new MouseEvent('mouseleave'));
+    ok('progress bar tooltip: hides on leave', !$('#bar-tip').classList.contains('show'));
 
     $('#b-play').click(); await sleep(100);
     ok('play: playing, narrated elements hidden', playing() && pend() > 0, 'pending=' + pend());
@@ -100,6 +107,11 @@ SELFTEST_JS = r"""
     ok('right arrow while playing: slide 2, still playing, elements hidden again', cur() === 2 && playing() && pend() > 0);
     await sleep(1200);
     ok('after navigating: the caption belongs to slide 2', cap().length > 0 && cap() !== capBefore, cap());
+    const capS2First = cap();
+    key('ArrowDown'); await sleep(400);
+    ok('down arrow while playing: advances to the next sentence on the same slide', cur() === 2 && playing() && cap() !== capS2First, cap());
+    key('ArrowUp'); await sleep(400);
+    ok('up arrow while playing: returns to the previous sentence on the same slide', cur() === 2 && playing() && cap() === capS2First, cap());
     await sleep(45000);
     ok('auto-advance: moved on to a later slide', cur() > 2 && playing(), 'slide ' + cur());
     ok('auto-advance: no "speaking" highlight left on earlier slides', document.querySelectorAll('#stage .slide:not(.active) .speaking').length === 0);
@@ -115,6 +127,23 @@ SELFTEST_JS = r"""
     key('g'); document.querySelectorAll('.ov-item')[1].click(); await sleep(300);
     ok('thumbnail click: jumps to slide 2 and resumes', cur() === 2 && playing() && $('#overview').hidden);
     ok('overview closed: thumbnails removed', document.querySelectorAll('.ov-item').length === 0);
+
+    key('t');
+    ok('T: transcript opens and playback pauses', !$('#script').hidden && !playing());
+    const totalLines = document.querySelectorAll('.sc-line').length;
+    ok('transcript: lists narration sentences', totalLines >= N);
+    $('#sc-search').value = 'スマホ'; $('#sc-search').dispatchEvent(new Event('input'));
+    const filteredLines = document.querySelectorAll('.sc-line:not([hidden])').length;
+    ok('transcript search: filters sentences', filteredLines > 0 && filteredLines < totalLines, filteredLines + '/' + totalLines);
+    key('Escape'); await sleep(300);
+    ok('Esc: transcript closes and playback resumes', $('#script').hidden && playing());
+    key('t'); document.querySelectorAll('.sc-slide')[2].click(); await sleep(300);
+    ok('transcript click: jumps to slide 3 and resumes', cur() === 3 && playing() && $('#script').hidden);
+
+    key('?');
+    ok('?: shortcuts help opens and playback pauses', !$('#help').hidden && !playing());
+    key('Escape'); await sleep(300);
+    ok('Esc: shortcuts help closes and playback resumes', $('#help').hidden && playing());
 
     key('c'); ok('C: captions off', !$('#caption').classList.contains('show'));
     key('c'); await sleep(50); ok('C: captions on', $('#caption').classList.contains('show') || cap() === '');
@@ -471,6 +500,8 @@ def main():
     en = HEAD.replace("-->", "lang: en\n-->") + '<section class="slide title"><h1 data-say="This is a short English deck.">English</h1></section>\n<section class="slide"><h2 data-say="It has two slides.">Two</h2></section>'
     r = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", built(tmp, "en.html", en).as_uri()])
     ok("UI text: labels, start screen and slide count are filled in", 'aria-label="All slides"' in r.stdout and "Play without sound" in r.stdout and "2 slides" in r.stdout)
+    rn = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", (tmp / "en.html").as_uri() + "?notes=1"])
+    ok("print notes: ?notes=1 injects speaker notes blocks for each slide", rn.stdout.count('class="print-notes"') == 2 and "This is a short English deck." in rn.stdout)
 
     # --- 8. narration with a fake speech engine ---
     mocked = deck.read_text(encoding="utf-8").replace('<div id="player">', TTS_MOCK_JS + '<div id="player">', 1).replace("</body>", TTS_TEST_JS + "</body>")
@@ -532,19 +563,22 @@ def main():
     ok("add_voice: qwen3_lang_code maps japanese/english/korean/chinese", (add_voice.qwen3_lang_code("Ono_Anna"), add_voice.qwen3_lang_code("Ryan"), add_voice.qwen3_lang_code("Sohee"), add_voice.qwen3_lang_code("Vivian")) == ("japanese", "english", "korean", "chinese"))
     wav = add_voice.pcm_to_wav([0.0, 0.5, -0.5], 24000)
     ok("add_voice: pcm_to_wav produces valid RIFF/WAVE header", wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and len(wav) == 44 + 6)
+    ok("add_voice: wav_duration measures WAV length in seconds", add_voice.wav_duration(add_voice.pcm_to_wav([0.0] * 12000, 24000)) == 0.5)
     sr_t = 24000
     f_t = int(sr_t * 0.02)
     noisy = [0.0] * (30 * f_t) + [0.3] * (5 * f_t) + [0.0] * (40 * f_t) + [0.3] * (5 * f_t) + [0.0] * (30 * f_t)
     cleaned_t = add_voice.clean_speech(noisy, sr_t)
     ok("add_voice: clean_speech trims outer silence and shortens long pauses", len(cleaned_t) < len(noisy) // 2, (len(noisy), len(cleaned_t)))
     ok("add_voice: _prep_qwen3_text normalizes trailing commas and terminal punctuation", add_voice._prep_qwen3_text("テストです、") == "テストです。")
-    ok("add_voice: _prep_qwen3_text normalizes numbers, decimals and symbols", add_voice._prep_qwen3_text("費用は4,800万円、平均二・三日、評価は◎") == "費用は4800万円、平均二てん三にち、評価は二重丸。")
+    ok("add_voice: _prep_qwen3_text normalizes numbers, decimals and symbols", add_voice._prep_qwen3_text("費用は4,800万円、平均二・三日、評価は◎") == "費用は四千八百万円、平均二てん三にち、評価はにじゅうまる。")
     ok("add_voice: _prep_qwen3_text converts 5+ digit numbers to 万/億 and % to パーセント", add_voice._prep_qwen3_text("30,000円以上、使用率70%に達し") in ("三万円以上、使用率70パーセントにたっし。", "三万円以上、使用率70パーセントに達し。"))
     for phrase, spoken in (
         ("受付番号は012345です。", "受付番号はゼロ、いち、に、さん、よん、ごです。"),
         ("型番AB12345、版はv1.2.3です。", "型番AB12345、版はv1.2.3です。"),
         ("更新日は2026.11.18です。", "更新日は2026.11.18です。"),
         ("資料名はProject Alpha、合計は123456円です。", "資料名はProject Alpha、合計は十二万三千四百五十六円です。"),
+        ("3,000円未満の交通費と初年度1,680万円の稟議、見積の提出。", "三千円みまんの交通費としょねんど千六百八十万円のりんぎ、みつもりの提出。"),
+        ("主なリスクと持ち主なのに、見積書と見積もり。", "おもなリスクと持ち主なのに、みつもりしょと見積もり。"),
         ("利用率は2.3%です。", "利用率は2てんさんパーセントです。"),
         ("０．０５％", "ゼロてんゼロごパーセント。"),
         ("気温は−5℃です。", "気温はマイナス5度です。"),

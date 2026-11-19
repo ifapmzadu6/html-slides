@@ -44,6 +44,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from html.parser import HTMLParser
 
@@ -492,6 +493,45 @@ def extract(deck_path, out_path, *, overwrite=True):
     print("Source extracted: %s" % out_path)
 
 
+def build_once(src, out, *, no_render=False, shots=None):
+    # 1. source lint
+    meta, css, slides, issues, lines = lint(read_source(src))
+    if any(i["level"] == "error" for i in issues):
+        print("Source lint: %s" % src.name)
+        check.print_issues(issues)
+        print("(The deck was NOT built.)")
+        return 1
+
+    # 2. assemble
+    try:
+        assemble(meta, css, slides, out)
+    except OSError as e:
+        fail("Could not update %s: %s" % (out, e))
+    print("Built: %s (%d slides, theme %s)" % (out, len(lines), meta["theme"]), flush=True)
+    if no_render:
+        check.print_issues(issues)
+        print("(The rendered check was skipped, so overflow has NOT been verified.)")
+        return 0
+
+    # 3. rendered check
+    try:
+        rep = check.inspect(out)
+    except check.CheckError as e:
+        check.print_issues(issues)
+        print("The rendered check could not run: %s" % e)
+        print("The deck was built, but overflow has NOT been verified. Tell the user so.")
+        return 2
+    bad = check.report(rep, lines=lines, extra=issues)
+    if shots:
+        try:
+            outdir, dense = check.shots(rep, shots)
+        except check.CheckError as e:
+            print("Screenshots could not be saved: %s" % e)
+            return 1 if bad else 2
+        print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (outdir, dense))
+    return 1 if bad else 0
+
+
 def main():
     check.setup_console()
     ap = argparse.ArgumentParser(description="Lint a slide source (.slides.html) and assemble the finished HTML deck")
@@ -500,6 +540,7 @@ def main():
     ap.add_argument("--shots", metavar="DIR", help="folder to save screenshots in")
     ap.add_argument("--no-render", "--no-check", dest="no_render", action="store_true", help="skip the browser check (lint and assemble only)")
     ap.add_argument("--extract", action="store_true", help="recover the source from a built deck")
+    ap.add_argument("--watch", action="store_true", help="rebuild automatically whenever the source file changes")
     a = ap.parse_args()
 
     src = pathlib.Path(a.source).resolve()
@@ -516,6 +557,8 @@ def main():
         fail("The output path is the same as the source. Pass -o with a different name.")
 
     if a.extract:
+        if a.watch:
+            fail("--watch cannot be combined with --extract.")
         if not a.out and os.path.lexists(out):
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         try:
@@ -528,42 +571,30 @@ def main():
             fail("Could not extract to %s: %s" % (out, e))
         return 0
 
-    # 1. source lint
-    meta, css, slides, issues, lines = lint(read_source(src))
-    if any(i["level"] == "error" for i in issues):
-        print("Source lint: %s" % src.name)
-        check.print_issues(issues)
-        print("(The deck was NOT built.)")
-        return 1
-
-    # 2. assemble
+    status = build_once(src, out, no_render=a.no_render, shots=a.shots)
+    if not a.watch:
+        return status
+    print("Watching %s for changes (Ctrl+C to stop)..." % src.name, flush=True)
+    last_sig = (src.stat().st_mtime_ns, src.stat().st_size)
     try:
-        assemble(meta, css, slides, out)
-    except OSError as e:
-        fail("Could not update %s: %s" % (out, e))
-    print("Built: %s (%d slides, theme %s)" % (out, len(lines), meta["theme"]), flush=True)
-    if a.no_render:
-        check.print_issues(issues)
-        print("(The rendered check was skipped, so overflow has NOT been verified.)")
+        while True:
+            time.sleep(0.5)
+            try:
+                st = src.stat()
+            except OSError:
+                continue
+            sig = (st.st_mtime_ns, st.st_size)
+            if sig != last_sig:
+                last_sig = sig
+                print("\n--- Rebuilding %s ---" % src.name, flush=True)
+                try:
+                    build_once(src, out, no_render=a.no_render, shots=a.shots)
+                except SystemExit as e:
+                    if e.code:
+                        print("(Rebuild error: exit %s)" % e.code, flush=True)
+    except KeyboardInterrupt:
+        print("\nStopped watching.")
         return 0
-
-    # 3. rendered check
-    try:
-        rep = check.inspect(out)
-    except check.CheckError as e:
-        check.print_issues(issues)
-        print("The rendered check could not run: %s" % e)
-        print("The deck was built, but overflow has NOT been verified. Tell the user so.")
-        return 2
-    bad = check.report(rep, lines=lines, extra=issues)
-    if a.shots:
-        try:
-            outdir, dense = check.shots(rep, a.shots)
-        except check.CheckError as e:
-            print("Screenshots could not be saved: %s" % e)
-            return 1 if bad else 2
-        print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (outdir, dense))
-    return 1 if bad else 0
 
 
 if __name__ == "__main__":
