@@ -390,6 +390,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #bar button:hover span { background: rgba(255,255,255,.6); }
 #btns { display: flex; align-items: center; gap: 2px; }
 #btns button { width: 44px; height: 40px; border: 0; background: none; color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font: 700 14px/1 var(--font); flex: none; }
+#btns #b-rate { width: auto; min-width: 44px; padding: 0 8px; }
 #btns button:hover { background: rgba(255,255,255,.16); }
 #btns button:focus-visible, #bar button:focus-visible, #start button:focus-visible { outline: 3px solid #fff; outline-offset: 1px; }
 #btns button.off { opacity: .45; }
@@ -398,9 +399,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #time { padding: 0 8px 0 2px; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: .72; font-size: 13px; }
 #btns .sp { flex: 1; }
 #voice { max-width: 190px; height: 32px; margin: 0 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.4); background: rgba(0,0,0,.5); color: #fff; font: 500 13px var(--font); }
-@media (max-width: 640px) { #voice { display: none; } #btns button { width: 40px; } }
+@media (max-width: 640px) { #voice { display: none; } #btns button { width: 40px; } #btns #b-rate { width: auto; min-width: 40px; padding: 0 6px; } }
 @media (max-width: 520px) { #time { display: none; } }
-@media (max-width: 440px) { #btns button { width: 34px; } #btns svg { width: 22px; height: 22px; } #count { padding: 0 4px; font-size: 13px; } #b-full { display: none !important; } }
+@media (max-width: 440px) { #btns button { width: 34px; } #btns #b-rate { width: auto; min-width: 36px; padding: 0 4px; font-size: 13px; } #btns svg { width: 22px; height: 22px; } #count { padding: 0 4px; font-size: 13px; } #b-full { display: none !important; } }
 
 /* --- start screen --- */
 #start { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; background: rgba(8,12,22,.72); color: #fff; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
@@ -1221,7 +1222,19 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var k = e.key, hit = true;
     if (!hlpEl.hidden) { if (k === 'Escape' || k === '?') { closeHelp(); e.preventDefault(); } return; }
     if (!scEl.hidden) { if (k === 'Escape' || k === 't' || k === 'T') { closeScript(); e.preventDefault(); } return; }
-    if (!ovEl.hidden) { if (k === 'Escape' || k === 'g' || k === 'G') { closeOverview(); e.preventDefault(); } return; }
+    if (!ovEl.hidden) {
+      if (k === 'Escape' || k === 'g' || k === 'G') { closeOverview(); e.preventDefault(); return; }
+      if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'Home' || k === 'End') {
+        var items = $$('.ov-item', ovGrid), idx = items.indexOf(document.activeElement);
+        if (items.length) {
+          var ni = k === 'Home' ? 0 : k === 'End' ? items.length - 1 : (idx < 0 ? cur : idx) + (k === 'ArrowRight' ? 1 : -1);
+          ni = Math.max(0, Math.min(items.length - 1, ni));
+          items[ni].focus(); items[ni].scrollIntoView({ block: 'nearest' });
+          e.preventDefault();
+        }
+      }
+      return;
+    }
     if (k >= '0' && k <= '9') {
       if (!jumpBuf && k === '0') return;
       clearTimeout(jumpTimer);

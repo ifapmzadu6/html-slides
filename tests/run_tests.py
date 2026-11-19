@@ -126,8 +126,8 @@ SELFTEST_JS = r"""
     ok('G: overview opens and playback pauses', !$('#overview').hidden && !playing());
     ok('overview: one thumbnail per slide', document.querySelectorAll('.ov-item').length === N);
     ok('overview: exactly one thumbnail marked current', document.querySelectorAll('.ov-item.current').length === 1);
-    const c0 = cur(); key('ArrowRight'); key(' ');
-    ok('overview open: other keys do nothing', cur() === c0 && !playing());
+    const c0 = cur(), ovFocus0 = document.activeElement; key('ArrowRight'); key(' ');
+    ok('overview open: arrow moves focus, slide and playback stay put', cur() === c0 && !playing() && (c0 === N || document.activeElement !== ovFocus0));
     key('Escape'); await sleep(300);
     ok('Esc: overview closes and playback resumes', $('#overview').hidden && playing());
     key('g'); document.querySelectorAll('.ov-item')[1].click(); await sleep(300);
@@ -350,6 +350,12 @@ def main():
     build.assemble(meta, css, slides, deck)
     rep = check.inspect(deck)
     ok("sample: no errors or warnings in the rendered check", not rep["issues"], rep["issues"])
+    pdf_plain = tmp / "starter.pdf"
+    check.export_pdf(rep, pdf_plain, notes=False)
+    ok("pdf export: writes a valid PDF file", pdf_plain.is_file() and pdf_plain.read_bytes().startswith(b"%PDF-") and pdf_plain.stat().st_size > 1000)
+    pdf_notes = tmp / "starter-notes.pdf"
+    check.export_pdf(rep, pdf_notes, notes=True)
+    ok("pdf export with notes: writes a larger PDF file", pdf_notes.is_file() and pdf_notes.read_bytes().startswith(b"%PDF-") and pdf_notes.stat().st_size > pdf_plain.stat().st_size)
     for theme in build.THEMES:
         d = tmp / ("theme-%s.html" % theme)
         build.assemble(dict(meta, theme=theme), css, slides, d)
