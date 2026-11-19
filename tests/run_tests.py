@@ -143,8 +143,11 @@ SELFTEST_JS = r"""
     $('#sc-search').value = 'スマホ'; $('#sc-search').dispatchEvent(new Event('input'));
     const filteredLines = document.querySelectorAll('.sc-line:not([hidden])').length;
     ok('transcript search: filters sentences', filteredLines > 0 && filteredLines < totalLines, filteredLines + '/' + totalLines);
+    ok('transcript search: shows match count', $('#sc-count').textContent === filteredLines + ' / ' + totalLines && $('#sc-empty').hidden);
     $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     ok('transcript search: ArrowDown focuses first matching line', document.activeElement && document.activeElement.classList.contains('sc-line'));
+    $('#sc-search').value = '___no_match___'; $('#sc-search').dispatchEvent(new Event('input'));
+    ok('transcript search: shows empty state on 0 matches', !$('#sc-empty').hidden && $('#sc-count').textContent === '0 / ' + totalLines);
     key('Escape'); await sleep(300);
     ok('Esc: transcript closes and playback resumes', $('#script').hidden && playing());
     key('t'); document.querySelectorAll('.sc-slide')[2].click(); await sleep(300);
