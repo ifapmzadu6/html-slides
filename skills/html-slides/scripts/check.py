@@ -6,6 +6,7 @@ build.py calls this automatically, so there is normally no need to run it direct
   python3 check.py deck.html --shots outdir  # also save a PNG of every slide (1280x720) and two phone views
   python3 check.py deck.html --pdf deck.pdf  # also export as PDF (add --pdf-notes for speaker notes)
   python3 check.py deck.html --script deck.md  # also export the narration script as Markdown
+  python3 check.py deck.html --vtt deck.vtt    # also export timed captions as WebVTT (.vtt)
 
 Uses headless Chrome / Edge / Chromium. If none is found, set the CHROME environment variable to its path.
 Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (no browser, ...)
@@ -200,6 +201,37 @@ def export_script(rep, out_path):
     return out
 
 
+def _vtt_time(ms):
+    ms = max(0, int(ms))
+    h, rem = divmod(ms, 3600000)
+    m, rem = divmod(rem, 60000)
+    s, ms = divmod(rem, 1000)
+    return "%02d:%02d:%02d.%03d" % (h, m, s, ms)
+
+
+def export_vtt(rep, out_path):
+    """Export the deck's captions with timestamps as WebVTT (.vtt)."""
+    out = pathlib.Path(out_path).resolve()
+    parts = ["WEBVTT", ""]
+    idx = 0
+    for item in rep.get("script") or []:
+        for cue in item.get("cues") or []:
+            text = (cue.get("text") or "").strip()
+            if not text:
+                continue
+            idx += 1
+            parts.append(str(idx))
+            parts.append("%s --> %s" % (_vtt_time(cue.get("start", 0)), _vtt_time(cue.get("end", 0))))
+            parts.append(text.replace("-->", "->"))
+            parts.append("")
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("\n".join(parts), encoding="utf-8")
+    except OSError as e:
+        raise CheckError("Could not write WebVTT to %s: %s" % (out, e)) from e
+    return out
+
+
 def report(rep, lines=None, extra=None):
     """Print the report. `lines` maps each slide to its source line. Returns True when there are errors."""
     issues = list(extra or []) + rep.get("issues", [])
@@ -245,6 +277,7 @@ def main():
     ap.add_argument("--pdf", metavar="FILE", help="export the deck as a PDF file")
     ap.add_argument("--pdf-notes", action="store_true", help="include speaker notes in the exported PDF")
     ap.add_argument("--script", metavar="FILE", help="export the narration script as Markdown")
+    ap.add_argument("--vtt", metavar="FILE", help="export timed captions as WebVTT (.vtt)")
     a = ap.parse_args()
     try:
         rep = inspect(a.deck)
@@ -273,6 +306,13 @@ def main():
             print("Script could not be saved: %s" % e)
             return 1 if bad else 2
         print("Script: %s" % sc_out)
+    if a.vtt:
+        try:
+            vtt_out = export_vtt(rep, a.vtt)
+        except CheckError as e:
+            print("WebVTT could not be saved: %s" % e)
+            return 1 if bad else 2
+        print("WebVTT: %s" % vtt_out)
     return 1 if bad else 0
 
 

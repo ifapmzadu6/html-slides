@@ -127,6 +127,7 @@ SELFTEST_JS = r"""
     key('g');
     ok('G: overview opens and playback pauses', !$('#overview').hidden && !playing());
     ok('overview: one thumbnail per slide', document.querySelectorAll('.ov-item').length === N);
+    ok('overview: each thumbnail shows a duration badge', document.querySelectorAll('.ov-dur').length === N);
     ok('overview: exactly one thumbnail marked current', document.querySelectorAll('.ov-item.current').length === 1);
     const c0 = cur(), ovFocus0 = document.activeElement; key('ArrowRight'); key(' ');
     ok('overview open: arrow moves focus, slide and playback stay put', cur() === c0 && !playing() && (c0 === N || document.activeElement !== ovFocus0));
@@ -377,6 +378,10 @@ def main():
     check.export_script(rep, md_script)
     md_text = md_script.read_text(encoding="utf-8")
     ok("script export: writes Markdown headings and narration lines", md_text.startswith("# ") and md_text.count("\n## ") == rep["slides"] and "- " in md_text)
+    vtt_file = tmp / "starter.vtt"
+    check.export_vtt(rep, vtt_file)
+    vtt_text = vtt_file.read_text(encoding="utf-8")
+    ok("vtt export: writes valid WebVTT with timestamps", vtt_text.startswith("WEBVTT\n\n1\n00:") and " --> " in vtt_text)
     for theme in build.THEMES:
         d = tmp / ("theme-%s.html" % theme)
         build.assemble(dict(meta, theme=theme), css, slides, d)
