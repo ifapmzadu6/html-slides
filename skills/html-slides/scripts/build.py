@@ -88,7 +88,10 @@ IMAGE_MIMES = {
     ".bmp": "image/bmp",
     ".ico": "image/x-icon",
 }
-SRC_ATTR_RE = re.compile(r"""(?<=[\s/])(src\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))""", re.I | re.S)
+ATTR_TOKEN_RE = re.compile(
+    r"""([A-Za-z_:@][A-Za-z0-9_.:@-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?""",
+    re.S,
+)
 LARGE_IMAGE_BYTES = 2 * 1024 * 1024
 INSIDE_SLIDES = 'Put all content inside <section class="slide"> ... </section>.'
 NO_EXTERNAL = "Use a local image file (build.py embeds it automatically) or inline SVG. Do not load external URLs."
@@ -137,11 +140,18 @@ def _local_image_path(src_val, base_dir):
     s = (src_val or "").strip()
     if not s or re.match(r"^(data:|blob:|https?:|file:|//|#)", s, re.I):
         return None
-    raw = urllib.parse.unquote(s.split("#", 1)[0].split("?", 1)[0])
+    raw = s.split("#", 1)[0].split("?", 1)[0]
     p = pathlib.Path(raw)
-    if not p.is_absolute():
-        p = base_dir / p
-    return p.resolve()
+    resolved = (p if p.is_absolute() else base_dir / p).resolve()
+    if resolved.is_file():
+        return resolved
+    unquoted = urllib.parse.unquote(raw)
+    if unquoted != raw:
+        pu = pathlib.Path(unquoted)
+        resolved_u = (pu if pu.is_absolute() else base_dir / pu).resolve()
+        if resolved_u.is_file():
+            return resolved_u
+    return resolved
 
 
 def _image_mime(path):
@@ -177,6 +187,31 @@ class _ImgLocator(HTMLParser):
         self._record(tag)
 
 
+def _rewrite_img_src(tag, base, cache):
+    """Replace only the actual src attribute on an <img> start tag (never inside other attribute values)."""
+    for m in ATTR_TOKEN_RE.finditer(tag, 4):
+        if m.group(1).lower() != "src":
+            continue
+        if m.group(2) is not None:
+            val, quote = m.group(2), '"'
+        elif m.group(3) is not None:
+            val, quote = m.group(3), "'"
+        elif m.group(4) is not None:
+            val, quote = m.group(4), '"'
+        else:
+            return tag
+        path = _local_image_path(html.unescape(val), base)
+        if path is None or not path.is_file():
+            return tag
+        uri = cache.get(path)
+        if uri is None:
+            b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+            uri = "data:%s;base64,%s" % (_image_mime(path), b64)
+            cache[path] = uri
+        return tag[:m.start()] + m.group(1) + "=" + quote + uri + quote + tag[m.end():]
+    return tag
+
+
 def inline_local_images(slides_html, base_dir):
     """Embed local <img src="..."> files as base64 data URIs so the output remains a single self-contained HTML file."""
     base = pathlib.Path(base_dir).resolve()
@@ -189,30 +224,41 @@ def inline_local_images(slides_html, base_dir):
     out, prev = [], 0
     for start, end in loc.tags:
         out.append(slides_html[prev:start])
-        tag = slides_html[start:end]
-
-        def replace_src(attr_match):
-            prefix = attr_match.group(1)
-            if attr_match.group(2) is not None:
-                val, quote = attr_match.group(2), '"'
-            elif attr_match.group(3) is not None:
-                val, quote = attr_match.group(3), "'"
-            else:
-                val, quote = attr_match.group(4), '"'
-            path = _local_image_path(html.unescape(val), base)
-            if path is None or not path.is_file():
-                return attr_match.group(0)
-            uri = cache.get(path)
-            if uri is None:
-                b64 = base64.b64encode(path.read_bytes()).decode("ascii")
-                uri = "data:%s;base64,%s" % (_image_mime(path), b64)
-                cache[path] = uri
-            return prefix + quote + uri + quote
-
-        out.append(SRC_ATTR_RE.sub(replace_src, tag, count=1))
+        out.append(_rewrite_img_src(slides_html[start:end], base, cache))
         prev = end
     out.append(slides_html[prev:])
     return "".join(out)
+
+
+def _watch_sig(src):
+    """Return a signature covering the source file and any local images it references."""
+    sigs = []
+    try:
+        st = src.stat()
+        sigs.append((str(src), st.st_mtime_ns, st.st_size))
+        text = src.read_text(encoding="utf-8-sig")
+    except OSError:
+        return tuple(sigs)
+    loc = _ImgLocator(text)
+    loc.feed(text)
+    loc.close()
+    seen = set()
+    for start, end in loc.tags:
+        tag = text[start:end]
+        for m in ATTR_TOKEN_RE.finditer(tag, 4):
+            if m.group(1).lower() != "src":
+                continue
+            val = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
+            p = _local_image_path(html.unescape(val or ""), src.parent)
+            if p and p not in seen:
+                seen.add(p)
+                try:
+                    ist = p.stat()
+                    sigs.append((str(p), ist.st_mtime_ns, ist.st_size))
+                except OSError:
+                    sigs.append((str(p), 0, 0))
+            break
+    return tuple(sigs)
 
 
 class Lint(HTMLParser):
@@ -747,16 +793,12 @@ def main():
     if not a.watch:
         return status
     print("Watching %s for changes (Ctrl+C to stop)..." % src.name, flush=True)
-    last_sig = (src.stat().st_mtime_ns, src.stat().st_size)
+    last_sig = _watch_sig(src)
     try:
         while True:
             time.sleep(0.5)
-            try:
-                st = src.stat()
-            except OSError:
-                continue
-            sig = (st.st_mtime_ns, st.st_size)
-            if sig != last_sig:
+            sig = _watch_sig(src)
+            if sig and sig != last_sig:
                 last_sig = sig
                 print("\n--- Rebuilding %s ---" % src.name, flush=True)
                 try:
