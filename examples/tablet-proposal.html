@@ -979,7 +979,15 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function setWake(on) {
     if (!('wakeLock' in navigator) || !navigator.wakeLock) return;
     if (on) {
-      if (!wakeLock) { try { navigator.wakeLock.request('screen').then(function (wl) { wakeLock = wl; wl.addEventListener('release', function () { if (wakeLock === wl) wakeLock = null; }); }, function () {}); } catch (e) {} }
+      if (!wakeLock) {
+        try {
+          navigator.wakeLock.request('screen').then(function (wl) {
+            if (!playing) { try { wl.release().catch(function () {}); } catch (e) {} return; }
+            wakeLock = wl;
+            wl.addEventListener('release', function () { if (wakeLock === wl) wakeLock = null; });
+          }, function () {});
+        } catch (e) {}
+      }
     } else if (wakeLock) {
       var wl = wakeLock; wakeLock = null; try { wl.release().catch(function () {}); } catch (e) {}
     }
@@ -987,7 +995,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function play(silentMode) {
     if (silentMode) { muted = true; store.set('muted', '1'); }
     unlock();
-    var resume = !ended && mid && (cueIdx || partIdx);
+    var resume = !ended && mid && (cueIdx || partIdx || audioPausedText);
     if (ended) { ended = false; showSlide(0, false); }
     else if (!mid) showSlide(cur, false);
     playing = true; everPlayed = true; startEl.hidden = true; mid = true;
