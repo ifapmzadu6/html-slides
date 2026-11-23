@@ -97,7 +97,9 @@ SELFTEST_JS = r"""
     ok('playing: the element being narrated is visible', document.querySelectorAll('#stage .slide.active .speaking:not(.pending)').length >= 1);
 
     const capBefore = cap(), pendBefore = pend();
-    key(' '); ok('Space: pauses', !playing());
+    $('#b-cc').focus();
+    key('k'); ok('K: pauses even when a control button has focus', !playing());
+    $('#b-cc').blur();
     await sleep(4000);
     ok('paused: nothing advances', cur() === 1 && pend() === pendBefore && cap() === capBefore);
     key(' '); await sleep(400);
