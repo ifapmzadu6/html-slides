@@ -27,6 +27,7 @@ Speech engines (all run on this computer):
 import argparse
 import base64
 import html
+import http.client
 import importlib.util
 import io
 import json
@@ -102,14 +103,15 @@ OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def local_url(url):
-    host = urllib.parse.urlparse(url).hostname
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        raise SystemExit("ERROR: %s is not this computer. Only 127.0.0.1 is allowed, so that the narration is never sent elsewhere." % url)
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
+        raise SystemExit("ERROR: %s is not this computer. Only http(s)://127.0.0.1 is allowed, so that the narration is never sent elsewhere." % url)
     return url.rstrip("/")
 
 
 def http(url, data=None, timeout=120):
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST" if data is not None else "GET")
+    headers = {"Content-Type": "application/json"} if data else {}
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data is not None else "GET")
     with OPENER.open(req, timeout=timeout) as r:
         return r.read()
 
@@ -117,18 +119,28 @@ def http(url, data=None, timeout=120):
 def find_voicevox(url):
     for u in ([local_url(url)] if url else ["http://127.0.0.1:%d" % p for p in LOCAL_PORTS]):
         try:
-            http(u + "/version", timeout=2)
-            return u
-        except (urllib.error.URLError, OSError):
+            ver = json.loads(http(u + "/version", timeout=2))
+            if isinstance(ver, str) and ver.strip():
+                return u
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
             continue
     return None
 
 
 def voicevox_speakers(base):
+    data = json.loads(http(base + "/speakers"))
+    if not isinstance(data, list):
+        raise ValueError("unexpected /speakers response")
     out = []
-    for sp in json.loads(http(base + "/speakers")):
-        for st in sp.get("styles", []):
-            out.append((st["id"], "%s（%s）" % (sp["name"], st["name"])))
+    for sp in data:
+        if not isinstance(sp, dict) or not isinstance(sp.get("name"), str):
+            continue
+        styles = sp.get("styles")
+        if not isinstance(styles, list):
+            continue
+        for st in styles:
+            if isinstance(st, dict) and "id" in st and isinstance(st.get("name"), str):
+                out.append((st["id"], "%s（%s）" % (sp["name"], st["name"])))
     return out
 
 
@@ -146,13 +158,16 @@ def find_kokoro_api(url):
             data = json.loads(http(u + "/v1/audio/voices", timeout=2))
             if isinstance(data, dict) and isinstance(data.get("voices"), list):
                 return u
-        except (urllib.error.URLError, OSError, ValueError):
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
             continue
     return None
 
 
 def kokoro_api_voices(base):
-    return [(v, v) for v in json.loads(http(base + "/v1/audio/voices")).get("voices", [])]
+    data = json.loads(http(base + "/v1/audio/voices"))
+    if not isinstance(data, dict) or not isinstance(data.get("voices"), list):
+        raise ValueError("unexpected /v1/audio/voices response")
+    return [(v, v) for v in data["voices"] if isinstance(v, str) and v.strip()]
 
 
 def kokoro_api_synth(base, text, voice, speed):
@@ -172,11 +187,13 @@ def kokoro_py_available():
 
 def kokoro_lang_code(voice):
     # Kokoro voice IDs start with a language prefix: j (ja), a (en-US), b (en-GB), z (zh), etc.
-    return voice[0] if voice and voice[0] in "jabzefhip" else "j"
+    v = (voice or "").strip()
+    return v[0].lower() if v and v[0].lower() in "jabzefhip" else "j"
 
 
 def clean_speech(samples, sample_rate=24000, threshold=0.0015, max_pause=0.45, keep_pause=0.24):
     """Trim leading/trailing silence and shorten abnormally long internal pauses without clipping voiceless consonants or endings."""
+    samples = [x if math.isfinite(x) else 0.0 for x in samples]
     win = max(1, int(sample_rate * 0.02))
     n_frames = len(samples) // win
     if n_frames < 3:
@@ -247,12 +264,14 @@ def clean_speech(samples, sample_rate=24000, threshold=0.0015, max_pause=0.45, k
 
 
 def pcm_to_wav(samples, sample_rate=24000):
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
-        pcm = [max(-32768, min(32767, int(s * 32767.0))) for s in samples]
+        pcm = [0 if not math.isfinite(s) else max(-32768, min(32767, int(s * 32767.0))) for s in samples]
         wf.writeframes(struct.pack("<%dh" % len(pcm), *pcm))
     return buf.getvalue()
 
@@ -365,7 +384,7 @@ def _prep_qwen3_text(s, lang="japanese"):
 
     s = re.sub(r"[、,]+\s*$", "", s.strip())
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
-    s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", s)
+    s = re.sub(r"(?<=\d)[,，](?=\d{3}(?!\d))", "", s)
     # Expand the sign before decimal conversion can replace the leading zero.
     # Limit hyphen interpretation to measured quantities, keeping dates and IDs intact.
     signs = {"-": "マイナス", "－": "マイナス", "−": "マイナス", "+": "プラス", "＋": "プラス", "±": "プラスマイナス"}
@@ -374,21 +393,22 @@ def _prep_qwen3_text(s, lang="japanese"):
     # Read each fractional digit, including zeros, even in a numeric-only cue.
     s = re.sub(r"(?<![A-Za-z_\d.．])([0-9０-９]+)[.．]([0-9０-９]+)(?![A-Za-z_\d]|[.．]\d)(日)?",
                _ja_decimal, s)
+    # Always expand measurement symbols in Japanese narration, even for numeric-only cues like "25%" or "30℃".
+    s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
     if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", s):
         # A labeled identifier is a sequence of digits, including leading zeros.
         s = re.sub(r"(番号(?:は|が|：|:)?[ \t]*)([0-9０-９]+)(?![\dA-Za-z_.-])",
                    lambda m: m[1] + "、".join(JA_DIGITS[int(d)] for d in m[2]), s)
         # Only quantities with explicit units should acquire 万 or 億.
-        s = re.sub(r"(?<![A-Za-z_\d.])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
+        s = re.sub(r"(?<![A-Za-z_\d.．])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
                    _ja_num_units, s)
         # Convert 1-4 digit numbers before 円, 万円, 億円 (e.g. 3000円 -> 三千円, 4800万円 -> 四千八百万円) to explicit place-value kanji.
         s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{0,3})(?=(?:万|億)?円)",
                    lambda m: _ja_currency_group(int(m.group(1))), s)
         # Preserve the existing kanji decimal notation (e.g. 六・八万円).
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
-        s = re.sub(r"てん([二三四五六七八九2-9])日", r"てん\1にち", s)
-        s = re.sub(r"(?<![\w\d])[+＋](?=\d)", "プラス", s)
-        s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
+        s = re.sub(r"てん([〇零一二三四五六七八九0-9０-９])日", r"てん\1にち", s)
+        s = re.sub(r"(?<![A-Za-zＡ-Ｚａ-ｚ_\d])[+＋](?=[0-9０-９])", "プラス", s)
         for k, v in QWEN3_KANJI_FIXES:
             s = s.replace(k, v)
         tagger = _get_tagger()
@@ -553,6 +573,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
             batches.append(synth_list[start:end])
             start = end
 
+    wanted = set(texts)
     out = {}
     lang = lang or qwen3_lang_code(voice, " ".join(texts))
     align_lang = lang.capitalize() if lang != "auto" else "Japanese"
@@ -566,7 +587,8 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         batch = queue.pop(0)
         if cache["aligner"] is None:
             for t in batch:
-                out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature, lang=lang)
+                if t in wanted:
+                    out[t] = qwen3_synth(t, voice, speed, model_id, cache, instruct, temperature, lang=lang)
             continue
         # Join sentences with '\n' (while split_pattern='') and append a dummy sentinel sentence so Qwen3-TTS's final
         # codec EOS token never clips the trailing mora ('〜ます' / '〜ました') of the last sentence in the batch.
@@ -640,25 +662,29 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
             if len(batch) > 1:
                 mid = len(batch) // 2
                 queue[0:0] = [batch[:mid], batch[mid:]]
-            else:
+            elif batch[0] in wanted:
                 out[batch[0]] = qwen3_synth(batch[0], voice, speed, model_id, cache, instruct, temperature, lang=lang)
     return out
 
 
 def say_voices():
-    r = subprocess.run(["say", "-v", "?"], capture_output=True, text=True)
+    r = subprocess.run(["say", "-v", "?"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        return []
     seen, out = set(), []
     for line in r.stdout.splitlines():
-        m = re.match(r"(.+?)\s{2,}(\w+)\s+#", line)
-        if m and m.group(1) not in seen:
-            seen.add(m.group(1))
-            out.append((m.group(1), m.group(2)))
+        m = re.match(r"(.+?)\s+([a-zA-Z]{2,3}[_-][a-zA-Z0-9]+)\s+#", line)
+        if m:
+            name = m.group(1).strip()
+            if name and name not in seen:
+                seen.add(name)
+                out.append((name, m.group(2)))
     return out
 
 
 def say_synth(text, voice, speed, tmp):
     out = tmp / "say.aiff"
-    cmd = ["say", "-o", str(out), "-r", str(int(190 * speed))]
+    cmd = ["say", "-o", str(out), "-r", str(max(1, round(190 * speed)))]
     if voice:
         cmd += ["-v", voice]
     subprocess.run(cmd + ["--", text], check=True, capture_output=True)
@@ -711,12 +737,18 @@ def trim_clip(uri, seconds):
             decoded = pathlib.Path(tmp) / "decoded.wav"
             subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(source), "-c:a", "pcm_s16le", str(decoded)],
                            check=True, capture_output=True)
+            if not decoded.is_file() or not decoded.stat().st_size:
+                raise ValueError("ffmpeg produced empty audio")
             raw = decoded.read_bytes()
     with wave.open(io.BytesIO(raw), "rb") as audio:
-        if seconds >= audio.getnframes() / audio.getframerate():
+        rate = audio.getframerate()
+        nframes = audio.getnframes()
+        if rate <= 0 or nframes <= 0:
+            raise ValueError("invalid WAV audio header")
+        if seconds >= nframes / rate:
             raise ValueError("the end time must be inside the clip")
-        frames = round(seconds * audio.getframerate())
-        if not 0 < frames < audio.getnframes():
+        frames = round(seconds * rate)
+        if not 0 < frames < nframes:
             raise ValueError("the end time must leave at least one frame on each side")
         kept = audio.readframes(frames)
         if len(kept) != frames * audio.getnchannels() * audio.getsampwidth():
@@ -731,6 +763,8 @@ def trim_clip(uri, seconds):
 def save_voice_data(deck, original, voice_data):
     src = BLOCK.sub("", original)
     if voice_data is not None:
+        if ENGINE not in src:
+            raise ValueError("missing engine marker in deck HTML")
         data = json.dumps(voice_data, ensure_ascii=False).replace("</", "<\\/")
         block = '<!-- VOICE:START -->\n<script type="application/json" id="voice-data">%s</script>\n<!-- VOICE:END -->\n' % data
         src = src.replace(ENGINE, block + ENGINE, 1)
@@ -768,7 +802,14 @@ def main():
         print("ERROR: --temperature must be a finite number greater than or equal to zero.")
         return 2
 
+    if a.url and a.engine in ("qwen3", "say"):
+        print("ERROR: --url is only supported with --engine voicevox or --engine kokoro.")
+        return 2
+
     deck = pathlib.Path(a.deck).resolve()
+    if not deck.is_file():
+        print("ERROR: file not found: %s" % deck)
+        return 2
     try:
         with deck_lock(deck):
             src = deck.read_text(encoding="utf-8")
@@ -785,7 +826,8 @@ def main():
         j = re.search(r'<script type="application/json" id="voice-data">(.*?)</script>', m.group(0), re.S)
         if j:
             try:
-                old = json.loads(j.group(1).replace("<\\/", "</"))
+                parsed = json.loads(j.group(1).replace("<\\/", "</"))
+                old = parsed if isinstance(parsed, dict) else {}
             except ValueError:
                 old = {}
     if a.remove:
@@ -805,11 +847,16 @@ def main():
             print("ERROR: no embedded clip matches that exact narration sentence.")
             return 2
         try:
-            clips[sentence] = trim_clip(clips[sentence], float(end))
+            end_sec = float(end)
+            clips[sentence] = trim_clip(clips[sentence], end_sec)
             if isinstance(old.get("durations"), dict):
-                old["durations"][sentence] = round(float(end), 2)
+                old["durations"][sentence] = round(end_sec, 2)
             save_voice_data(deck, src, old)
-        except (ValueError, EOFError, wave.Error, OSError, subprocess.CalledProcessError) as e:
+        except subprocess.CalledProcessError as e:
+            detail = (e.stderr.decode("utf-8", errors="replace").strip() if isinstance(e.stderr, bytes) else (e.stderr or "")).strip()
+            print("ERROR: could not trim the clip: %s" % (detail or e))
+            return 2
+        except (ValueError, EOFError, wave.Error, OSError) as e:
             print("ERROR: could not trim the clip: %s" % e)
             return 2
         print("Trimmed the clip to %s seconds: %s" % (end, sentence))
@@ -847,7 +894,7 @@ def main():
     if engine == "voicevox":
         try:
             speakers = voicevox_speakers(base)
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError) as e:
             print("ERROR: could not get the voice list from the speech engine (%s)." % e)
             return 2
         if not speakers:
@@ -871,7 +918,7 @@ def main():
     elif engine == "kokoro-api":
         try:
             speakers = kokoro_api_voices(kokoro_base)
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError) as e:
             print("ERROR: could not get the voice list from Kokoro (%s)." % e)
             return 2
         if not speakers:
@@ -912,9 +959,6 @@ def main():
             print("ERROR: Qwen3 does not support deck language '%s'. Supported language codes: %s."
                   % (deck_lang, ", ".join(sorted(QWEN3_DECK_LANGS))))
             return 2
-        if windows_qwen and not (0 < a.speed < float("inf")):
-            print("ERROR: --speed must be a finite number greater than zero.")
-            return 2
         version = "v7" if lang in ("japanese", None) else "v4"
         if windows_qwen:
             version += "-torch"
@@ -945,10 +989,17 @@ def main():
     if not rep:
         print("The narration could not be read. Make the deck pass check.py first.")
         return 2
-    texts = json.loads(html.unescape(rep.group(1)))["texts"]
+    try:
+        raw_texts = json.loads(html.unescape(rep.group(1)))["texts"]
+        if not isinstance(raw_texts, list):
+            raise TypeError("texts is not a list")
+    except (ValueError, KeyError, TypeError) as e:
+        print("The narration could not be read (%s). Make the deck pass check.py first." % e)
+        return 2
+    texts = list(dict.fromkeys(t for t in raw_texts if isinstance(t, str) and t.strip()))
 
-    reuse = old.get("clips", {}) if (old.get("voice"), old.get("speed")) == (key, a.speed) else {}
-    reuse_durs = old.get("durations", {}) if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("durations"), dict) else {}
+    reuse = old["clips"] if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("clips"), dict) else {}
+    reuse_durs = old["durations"] if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("durations"), dict) else {}
     clips = {t: reuse[t] for t in texts if t in reuse}
     durations = {t: reuse_durs[t] for t in texts if t in reuse_durs}
     todo = [t for t in texts if t not in clips]
@@ -977,7 +1028,7 @@ def main():
                     raw, ext = qwen3_pre[t], ".wav"
                 else:
                     raw, ext = say_synth(t, label, a.speed, tmp)
-            except (ImportError, urllib.error.URLError, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
+            except (ImportError, urllib.error.URLError, http.client.HTTPException, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
                 print("Audio could not be generated: %s (%s)" % (t[:30], e))
                 print("The HTML was not changed.")
                 return 1

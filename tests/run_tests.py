@@ -27,6 +27,7 @@ from contextlib import contextmanager
 import base64
 import html
 import json
+import math
 import os
 import pathlib
 import re
@@ -920,6 +921,35 @@ def main():
     build.extract(css_esc_out, ext_san_out)
     ext_san_txt = ext_san_out.read_text(encoding="utf-8")
     ok("build: extract sanitizes --> and newlines in header", "title: A -- > B Line2" in ext_san_txt)
+
+    # Batch 3 regression tests for add_voice.py (#51-#75)
+    try:
+        add_voice.local_url("file://localhost/etc/passwd")
+        ok("add_voice: local_url rejects non-http scheme", False, "did not raise")
+    except SystemExit:
+        ok("add_voice: local_url rejects non-http scheme", True)
+    ok("add_voice: kokoro_lang_code handles uppercase voice ID", add_voice.kokoro_lang_code("AF_heart") == "a")
+    nan_wav = add_voice.pcm_to_wav([float("nan"), float("inf"), -float("inf"), 0.5], 24000)
+    ok("add_voice: pcm_to_wav handles NaN/Inf safely", nan_wav[:4] == b"RIFF" and len(nan_wav) == 44 + 8)
+    nan_clean = add_voice.clean_speech([float("nan")] * 100 + [0.2] * 2000 + [float("inf")] * 100, 24000)
+    ok("add_voice: clean_speech sanitizes non-finite samples", all(math.isfinite(x) for x in nan_clean))
+    ok("add_voice: _prep_qwen3_text expands numeric-only Japanese % and ℃",
+       add_voice._prep_qwen3_text("25%") == "25パーセント。" and add_voice._prep_qwen3_text("30℃") == "30度。")
+    ok("add_voice: _prep_qwen3_text expands + after kanji (前年比+5件)",
+       add_voice._prep_qwen3_text("前年比+5件です。") == "前年比プラス5件です。")
+    ok("add_voice: _prep_qwen3_text handles 六・一日 kanji decimal day",
+       add_voice._prep_qwen3_text("平均六・一日です。") == "平均六てん一にちです。")
+    ok("add_voice: _prep_qwen3_text strips full-width comma in numbers",
+       add_voice._prep_qwen3_text("費用は4，800円です。") == "費用は四千八百円です。")
+    try:
+        add_voice.save_voice_data(tmp / "no-engine.html", "<html><body>no engine</body></html>", {"clips": {}})
+        ok("add_voice: save_voice_data rejects HTML without engine marker", False, "did not raise")
+    except ValueError:
+        ok("add_voice: save_voice_data rejects HTML without engine marker", True)
+    with patch.object(sys, "argv", ["add_voice.py", str(trim_deck), "--engine", "qwen3", "--url", "http://127.0.0.1:50021"]):
+        ok("add_voice: rejects --url with --engine qwen3", add_voice.main() == 2)
+    with patch.object(sys, "argv", ["add_voice.py", str(tmp)]):
+        ok("add_voice: rejects directory as deck path", add_voice.main() == 2)
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
