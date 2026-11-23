@@ -410,6 +410,21 @@ def main():
     ok("images: --no-inline-images keeps relative src", 'src="pic.png"' in im_ext.read_text(encoding="utf-8"))
     broken_src = HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><img src="data:image/png;base64,AAAA" alt="bad"></section>'
     ok("images: rendered check catches broken images", any(i["type"] == "broken-image" for i in check.inspect(built(tmp, "broken-img.html", broken_src))["issues"]))
+    edge_src = (
+        '<!--\ntitle: Edge\ntheme: light\n-->\n'
+        '<section class="slide title"><img class="bg" src="pic.png" alt=""><h1 data-say="Hi.">Hi</h1>'
+        '<!-- <img src="pic.png" alt="comment"> -->'
+        '<img alt="A > B" src="pic.png"><img src=pic.png alt="unquoted"></section>\n'
+    )
+    em_meta, em_css, em_slides, em_issues, _ = build.lint(edge_src, base_dir=img_dir)
+    ok("images: edge-case lint is clean", not em_issues, em_issues)
+    em_html = img_dir / "edge.html"
+    build.assemble(em_meta, em_css, em_slides, em_html, base_dir=img_dir, inline_images=True)
+    em_text = em_html.read_text(encoding="utf-8")
+    ok("images: skips HTML comments and embeds alt-with-> and unquoted src", em_text.count("data:image/png;base64,") == 3 and '<!-- <img src="pic.png"' in em_text)
+    ok("images: img.bg works without data-bleed", not check.inspect(em_html)["issues"])
+    file_url_src = HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><img src="file:///tmp/pic.png" alt="f"></section>'
+    ok("images: lint rejects file:// URLs", any(i["type"] == "external" for i in errors(build.lint(file_url_src, base_dir=img_dir)[3])))
     for theme in build.THEMES:
         d = tmp / ("theme-%s.html" % theme)
         build.assemble(dict(meta, theme=theme), css, slides, d)
