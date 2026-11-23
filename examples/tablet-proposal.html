@@ -286,7 +286,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:has(> img.bg)::before { content: ""; position: absolute; inset: 0; width: auto; height: auto; right: 0; top: 0; border-radius: 0; background: linear-gradient(135deg, rgba(8,12,22,.76), rgba(8,12,22,.46)); opacity: 1; z-index: 1; display: block; pointer-events: none; }
 .slide:has(> img.bg)::after { display: none; }
 .slide:has(> img.bg) { color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
-.slide:has(> img.bg) .sub, .slide:has(> img.bg) .note, .slide:has(> img.bg) .slide-footer { color: rgba(255,255,255,.85); }
+.slide:has(> img.bg) .sub, .slide:has(> img.bg) .note, .slide:has(> img.bg) .slide-footer, .slide:has(> img.bg) figcaption { color: rgba(255,255,255,.85); }
 .slide:has(> img.bg) .kicker, .slide:has(> img.bg) strong { color: var(--accent-2); }
 .slide:has(> img.bg) .card, .slide:has(> img.bg) .box, .slide:has(> img.bg) ol.flow > li { color: var(--fg); text-shadow: none; }
 .slide:has(> img.bg) .card strong, .slide:has(> img.bg) .box strong { color: var(--accent); }
@@ -1346,9 +1346,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   $('#b-cc').onclick = function () { setCaps(!capsOn); };
   $('#b-full').onclick = fullscreen;
   $('#controls').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); });
-  $('#start-play').onclick = function (e) { e.stopPropagation(); if (qs.has('mute')) play(true); else { if (muted && !everPlayed) { muted = false; store.set('muted', '0'); } play(); } };
+  function startPlay() { if (qs.has('mute')) play(true); else { if (muted && !everPlayed) { muted = false; store.set('muted', '0'); } play(); } }
+  $('#start-play').onclick = function (e) { e.stopPropagation(); startPlay(); };
   $('#start-silent').onclick = function (e) { e.stopPropagation(); play(true); };
-  startEl.addEventListener('click', function () { $('#start-play').onclick({ stopPropagation: function () {} }); });
+  startEl.addEventListener('click', startPlay);
 
   var swiped = false, tx = 0, ty = 0, multi = false;
   stage.addEventListener('click', function (e) {
@@ -1424,8 +1425,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (k === 'g' || k === 'G') { openOverview(); e.preventDefault(); return; }
     if (k === 't' || k === 'T') { openScript(); e.preventDefault(); return; }
     if (k === '?') { openHelp(); e.preventDefault(); return; }
-    if (k === ' ' || k === 'k' || k === 'K') { if (e.target.closest && e.target.closest('button')) return; toggle(); }
-    else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button')) return; play(); }
+    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button')) return; toggle(); }
+    else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button')) return; startPlay(); }
     else if (k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === 'n' || k === 'N') { if (k === 'Enter' && e.target.closest && e.target.closest('button')) return; go(cur + 1); }
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace' || k === 'p' || k === 'P') go(cur - 1);
     else if (k === 'ArrowUp' && playing) jumpPart(-1);
