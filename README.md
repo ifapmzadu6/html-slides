@@ -16,6 +16,7 @@ It is written for [Claude Code](https://claude.com/claude-code) and other agents
 - **Phones**: captions move below the slide when the phone is held upright.
 - **Print & CLI export**: print to PDF one slide per page (or `?notes=1` with speaker notes), plus one-command `--pdf` / `--pdf-notes` and Markdown `--script` export from `build.py` / `check.py`.
 - **Ten themes**, plus a **dense mode** for information-heavy business documents: conclusion line, titled boxes, comparison tables with ○ / △ / ×, schedule (Gantt-style) tables, source notes, a footer with a confidentiality label and page numbers.
+- **Local images, single file**: write `<img src="photo.png" alt="…">` in the source and `build.py` automatically embeds local PNG/JPEG/WebP/GIF/SVG images as data URIs (with layouts for full-height figures, framed screenshots, text + image splits, photo cards, and full-bleed background photos).
 - **Nothing leaves the machine**: no external resources are loaded, only voices the browser reports as on-device are used, and the page opts out of automatic translation.
 
 ## Try it

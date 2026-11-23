@@ -37,6 +37,7 @@ HINTS = {
     "long-caption": "Split that sentence in two at a 。 (or a full stop). If the element has data-caption, split both data-say and data-caption at the same place.",
     "long-slide": "Split the slide in two.",
     "symbol": "Replace the symbol in the narration with words (→ becomes から / そして, 〜 becomes から, ／ becomes や / または, ＝ becomes は). The on-screen text may keep the symbol.",
+    "broken-image": "Check that the image path exists relative to the .slides.html file and is a valid PNG, JPEG, WebP, GIF or SVG image.",
     "voice-stale": "Run add_voice.py again.",
 }
 LABEL = {"error": "ERROR", "warn": "WARNING"}

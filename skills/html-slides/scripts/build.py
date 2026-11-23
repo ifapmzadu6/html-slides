@@ -37,10 +37,12 @@ Settings:
 Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (file missing, no browser, ...)
 """
 import argparse
+import base64
 import difflib
 import errno
 import hashlib
 import html
+import mimetypes
 import os
 import pathlib
 import re
@@ -48,6 +50,7 @@ import shutil
 import sys
 import tempfile
 import time
+import urllib.parse
 import webbrowser
 from contextlib import contextmanager
 from html.parser import HTMLParser
@@ -67,12 +70,27 @@ HEADER = re.compile(r"\A\s*<!--(.*?)-->", re.S)
 THEMES = ["light", "dark", "corporate", "warm", "forest", "sakura", "mono", "pop", "neon", "chalk"]
 SLIDE_CLASSES = ["slide", "title", "section", "end", "tc", "top", "dense", "center"]
 CLASSES = ["kicker", "sub", "big", "note", "badge", "grow", "cols", "card", "emoji", "emoji-xl", "stat", "flow", "voice",
-           "lead", "rows", "box", "arrows", "source", "tag", "ok", "warn", "ng", "num", "total", "matrix", "gantt", "bar", "alt"]
+           "lead", "rows", "box", "arrows", "source", "tag", "ok", "warn", "ng", "num", "total", "matrix", "gantt", "bar", "alt",
+           "frame", "cover", "bg"]
 DATA_ATTRS = ["data-say", "data-caption", "data-anim", "data-bleed", "data-noplay"]
 ANIMS = ["fade", "zoom", "pop", "left", "right"]
 VOID = {"br", "img", "hr", "input", "meta", "link", "source", "col", "wbr", "area", "embed", "track"}
 OPTIONAL_END = {"li", "p", "td", "th", "tr", "tbody", "thead", "tfoot", "dd", "dt", "option"}
 EXTERNAL_TAGS = {"img", "script", "link", "iframe", "video", "audio", "source", "image", "use", "embed", "object"}
+IMAGE_MIMES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
+    ".ico": "image/x-icon",
+}
+IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.I | re.S)
+SRC_ATTR_RE = re.compile(r"""(\bsrc\s*=\s*)(?:"([^"]*)"|'([^']*)')""", re.I | re.S)
+LARGE_IMAGE_BYTES = 2 * 1024 * 1024
 INSIDE_SLIDES = 'Put all content inside <section class="slide"> ... </section>.'
 NO_EXTERNAL = "Embed images as a data URI or inline SVG. Do not load external CSS, fonts or scripts."
 
@@ -115,13 +133,61 @@ def read_source(path):
         fail("%s is not valid UTF-8. Save the file as UTF-8 and run again." % path)
 
 
+def _local_image_path(src_val, base_dir):
+    """Resolve a local <img src> path against base_dir, or return None for URLs / data URIs."""
+    s = (src_val or "").strip()
+    if not s or re.match(r"^(data:|blob:|https?:|//|#)", s, re.I):
+        return None
+    raw = urllib.parse.unquote(s.split("#", 1)[0].split("?", 1)[0])
+    p = pathlib.Path(raw)
+    if not p.is_absolute():
+        p = base_dir / p
+    return p.resolve()
+
+
+def _image_mime(path):
+    ext = path.suffix.lower()
+    if ext in IMAGE_MIMES:
+        return IMAGE_MIMES[ext]
+    guessed, _ = mimetypes.guess_type(str(path))
+    return guessed if (guessed and guessed.startswith("image/")) else "application/octet-stream"
+
+
+def inline_local_images(slides_html, base_dir):
+    """Embed local <img src="..."> files as base64 data URIs so the output remains a single self-contained HTML file."""
+    base = pathlib.Path(base_dir).resolve()
+    cache = {}
+
+    def replace_img(tag_match):
+        tag = tag_match.group(0)
+
+        def replace_src(attr_match):
+            prefix = attr_match.group(1)
+            val = attr_match.group(2) if attr_match.group(2) is not None else attr_match.group(3)
+            quote = '"' if attr_match.group(2) is not None else "'"
+            path = _local_image_path(html.unescape(val), base)
+            if path is None or not path.is_file():
+                return attr_match.group(0)
+            uri = cache.get(path)
+            if uri is None:
+                b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+                uri = "data:%s;base64,%s" % (_image_mime(path), b64)
+                cache[path] = uri
+            return prefix + quote + uri + quote
+
+        return SRC_ATTR_RE.sub(replace_src, tag, count=1)
+
+    return IMG_TAG_RE.sub(replace_img, slides_html)
+
+
 class Lint(HTMLParser):
     """Source lint. Collects {line, type, level, msg, hint} dicts in self.issues."""
 
-    def __init__(self, custom_classes, dense=False):
+    def __init__(self, custom_classes, dense=False, base_dir=None):
         super().__init__(convert_charrefs=True)
         self.custom = custom_classes
         self.deck_dense = dense
+        self.base_dir = pathlib.Path(base_dir).resolve() if base_dir is not None else None
         self.issues = []
         self.stack = []     # open tags: dict(tag, line, cls, kids, text)
         self.slides = []    # dict(line, cls, cues)
@@ -210,6 +276,17 @@ class Lint(HTMLParser):
         for k in ("src", "href", "xlink:href"):
             if tag in EXTERNAL_TAGS and re.match(r"\s*(https?:)?//", a.get(k) or ""):
                 self.add("error", "external", "<%s> loads an external URL (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
+        if tag == "img" and self.base_dir is not None:
+            img_src = (a.get("src") or "").strip()
+            img_path = _local_image_path(img_src, self.base_dir)
+            if img_path is not None:
+                if not img_path.is_file():
+                    self.add("error", "missing-image", 'Image file not found: "%s" (looked for %s).' % (img_src, img_path),
+                             "Check the image path relative to the .slides.html file, or place the image in that folder.")
+                elif img_path.stat().st_size > LARGE_IMAGE_BYTES:
+                    mb = img_path.stat().st_size / (1024 * 1024)
+                    self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
+                             "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
         if tag not in VOID:
             self.stack.append({"tag": tag, "line": line, "cls": cls, "kids": 0, "text": ""})
 
@@ -366,10 +443,10 @@ def parse_source(text):
     return meta, css, slides, problems
 
 
-def lint(text):
+def lint(text, base_dir=None):
     meta, css, slides, problems = parse_source(text)
     custom = set(re.findall(r"\.([A-Za-z_][\w-]*)", css))
-    p = Lint(custom, dense=meta["density"] == "dense")
+    p = Lint(custom, dense=meta["density"] == "dense", base_dir=base_dir)
     p.feed(text)
     p.close()
     issues = problems + p.finish()
@@ -411,7 +488,9 @@ def staged_html(destination, content):
         yield staged
 
 
-def assemble(meta, css, slides, out_path):
+def assemble(meta, css, slides, out_path, *, base_dir=None, inline_images=True):
+    if base_dir is not None and inline_images:
+        slides = inline_local_images(slides, base_dir)
     t = TEMPLATE.read_text(encoding="utf-8")
     extra = ' translate="no"' + (' data-density="dense"' if meta.get("density") == "dense" else "") + (' data-footer="%s"' % html.escape(meta["footer"]) if meta.get("footer") is not None else "")
     t = re.sub(r'<html lang="[^"]*" data-theme="[^"]*"[^>]*>', lambda _: '<html lang="%s" data-theme="%s"%s>' % (html.escape(meta["lang"]), meta["theme"], extra), t, count=1)
@@ -502,9 +581,9 @@ def extract(deck_path, out_path, *, overwrite=True):
     print("Source extracted: %s" % out_path)
 
 
-def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None, vtt=None):
+def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None, vtt=None, inline_images=True):
     # 1. source lint
-    meta, css, slides, issues, lines = lint(read_source(src))
+    meta, css, slides, issues, lines = lint(read_source(src), base_dir=src.parent)
     if any(i["level"] == "error" for i in issues):
         print("Source lint: %s" % src.name)
         check.print_issues(issues)
@@ -513,7 +592,7 @@ def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=Fal
 
     # 2. assemble
     try:
-        assemble(meta, css, slides, out)
+        assemble(meta, css, slides, out, base_dir=src.parent, inline_images=inline_images)
     except OSError as e:
         fail("Could not update %s: %s" % (out, e))
     print("Built: %s (%d slides, theme %s)" % (out, len(lines), meta["theme"]), flush=True)
@@ -573,6 +652,7 @@ def main():
     ap.add_argument("--script", metavar="FILE", help="export the narration script as Markdown")
     ap.add_argument("--vtt", metavar="FILE", help="export timed captions as WebVTT (.vtt)")
     ap.add_argument("--no-render", "--no-check", dest="no_render", action="store_true", help="skip the browser check (lint and assemble only)")
+    ap.add_argument("--no-inline-images", action="store_true", help="keep local <img src> paths as external links instead of embedding them as data URIs")
     ap.add_argument("--extract", action="store_true", help="recover the source from a built deck")
     ap.add_argument("--watch", action="store_true", help="rebuild automatically whenever the source file changes")
     ap.add_argument("--open", action="store_true", help="open the built deck in the default browser")
@@ -621,7 +701,7 @@ def main():
     if a.vtt and a.no_render:
         fail("--vtt cannot be combined with --no-render (WebVTT export requires headless Chrome/Edge).")
 
-    status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt)
+    status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
     if a.open and out.is_file():
         webbrowser.open(out.as_uri())
     if not a.watch:
@@ -640,7 +720,7 @@ def main():
                 last_sig = sig
                 print("\n--- Rebuilding %s ---" % src.name, flush=True)
                 try:
-                    build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt)
+                    build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
                 except SystemExit as e:
                     if e.code:
                         print("(Rebuild error: exit %s)" % e.code, flush=True)
