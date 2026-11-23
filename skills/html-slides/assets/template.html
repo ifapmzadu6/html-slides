@@ -1016,6 +1016,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         : Math.min(1, (Date.now() - partStart) * rate / Math.max(1, partDur));
       partPf = Math.max(partPf, Math.max(0, pf));
       done += partDur * partPf;
+    } else if (!inPart && audioPausedText && audio && isFinite(audio.duration) && audio.duration > 0 && T[cueIdx] && T[cueIdx].parts[partIdx] && T[cueIdx].parts[partIdx].say === audioPausedText) {
+      done += T[cueIdx].parts[partIdx].dur * Math.min(1, Math.max(0, audio.currentTime / audio.duration));
     }
     var frac = force != null ? force : (ended ? 1 : (mid ? Math.min(1, done / total) : 0));
     var elapsed = 0;
