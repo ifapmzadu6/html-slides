@@ -49,7 +49,7 @@ class CheckError(Exception):
 
 def find_browser():
     env = os.environ.get("CHROME")
-    if env and os.path.exists(env):
+    if env and os.path.isfile(env):
         return env
     if sys.platform == "win32":
         for key in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
@@ -60,7 +60,7 @@ def find_browser():
                     if candidate.is_file():
                         return str(candidate)
     for p in CANDIDATES:
-        if os.path.exists(p):
+        if os.path.isfile(p):
             return p
     for n in NAMES:
         p = shutil.which(n)
@@ -116,10 +116,16 @@ def inspect(deck):
     m = re.search(r'<pre id="check-report">(.*?)</pre>', r.stdout, re.S)
     if not m:
         raise CheckError("No check report came back. Look for a <script> or broken HTML in the source.\n" + r.stderr[-500:])
-    rep = json.loads(html.unescape(m.group(1)))
+    try:
+        rep = json.loads(html.unescape(m.group(1)))
+    except ValueError as e:
+        raise CheckError("Invalid check report JSON: %s" % e) from e
+    if not isinstance(rep, dict) or not isinstance(rep.get("issues"), list):
+        raise CheckError("Malformed check report structure.")
     for i in rep["issues"]:
-        i.setdefault("level", "error")
-    if re.search(r"<(script|link|img|iframe|image|use|video|audio|source)\b[^>]*(src|href)=[\"'](https?:)?//|url\([\"']?(https?:)?//|@import", src):
+        if isinstance(i, dict):
+            i.setdefault("level", "error")
+    if re.search(r"<(script|link|img|iframe|image|use|video|audio|source)\b[^>]*\b(src|href)=[\"']((https?:)?//|file:)|url\([\"']?(https?:)?//|@import\b", src, re.I):
         rep["issues"].append({"slide": 0, "type": "external", "level": "error",
                               "msg": "The deck loads an external URL. It will not show offline or when the file is opened by double-click.",
                               "hint": "Embed images as a data URI or inline SVG. Do not load external CSS, fonts or scripts."})
@@ -152,7 +158,7 @@ def shots(rep, outdir):
             for name, w, h in (("mobile-portrait", 390, 844), ("mobile-landscape", 844, 390)):
                 z = 2 if w < 500 else 1
                 wrap.write_text('<!DOCTYPE html><body style="margin:0;background:#000;overflow:hidden"><iframe src="%s?capdemo=1#%d" style="border:0;display:block;width:%dpx;height:%dpx;transform:scale(%d);transform-origin:0 0"></iframe>'
-                                % (url, dense, w, h, z), encoding="utf-8")
+                                % (html.escape(url, quote=True), dense, w, h, z), encoding="utf-8")
                 capture(stage / (name + ".png"), wrap.as_uri(), w * z, h * z, 4000)
             for png in stage.glob("*.png"):
                 png.replace(out / png.name)
@@ -170,6 +176,8 @@ def shots(rep, outdir):
 def export_pdf(rep, out_path, notes=False):
     """Export the deck as a PDF using headless Chrome/Edge (with optional speaker notes)."""
     out = pathlib.Path(out_path).resolve()
+    if out.is_dir():
+        raise CheckError("PDF output path is a directory: %s" % out)
     browser = rep["browser"]
     url = rep["deck"].as_uri() + ("?notes=1" if notes else "")
     try:
@@ -187,6 +195,8 @@ def export_pdf(rep, out_path, notes=False):
 
 
 def _write_atomic(out, text):
+    if out.is_dir():
+        raise OSError("output path is a directory: %s" % out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=out.parent) as temp:
         tmp = pathlib.Path(temp) / out.name
@@ -197,19 +207,32 @@ def _write_atomic(out, text):
 def export_script(rep, out_path):
     """Export the deck's narration script as Markdown."""
     out = pathlib.Path(out_path).resolve()
-    title = rep.get("title") or rep["deck"].stem
+    title = re.sub(r"\s+", " ", str(rep.get("title") or rep["deck"].stem)).strip()
     parts = ["# " + title, ""]
     for item in rep.get("script") or []:
-        sec = int(item.get("sec") or 0)
-        parts.append("## %s (%d:%02d)" % (item.get("label") or "", sec // 60, sec % 60))
+        try:
+            sec = max(0, int(item.get("sec") or 0))
+        except (TypeError, ValueError):
+            sec = 0
+        label = re.sub(r"\s+", " ", str(item.get("label") or "")).strip()
+        parts.append("## %s (%d:%02d)" % (label, sec // 60, sec % 60))
         for line in item.get("lines") or []:
-            parts.append("- " + line)
+            clean_line = re.sub(r"\s+", " ", str(line)).strip()
+            if clean_line:
+                parts.append("- " + clean_line)
         parts.append("")
     try:
         _write_atomic(out, "\n".join(parts))
     except OSError as e:
         raise CheckError("Could not write script to %s: %s" % (out, e)) from e
     return out
+
+
+def _vtt_ms(val):
+    try:
+        return max(0, int(val))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _vtt_time(ms):
@@ -230,9 +253,11 @@ def export_vtt(rep, out_path):
             text = re.sub(r"\s+", " ", cue.get("text") or "").strip()
             if not text:
                 continue
+            start_ms = _vtt_ms(cue.get("start"))
+            end_ms = max(start_ms + 1, _vtt_ms(cue.get("end")))
             idx += 1
             parts.append(str(idx))
-            parts.append("%s --> %s" % (_vtt_time(cue.get("start", 0)), _vtt_time(cue.get("end", 0))))
+            parts.append("%s --> %s" % (_vtt_time(start_ms), _vtt_time(end_ms)))
             parts.append(text.replace("-->", "->"))
             parts.append("")
     try:
@@ -249,9 +274,10 @@ def report(rep, lines=None, extra=None):
     if stats:
         print("Narration per slide (aim for 10-30 seconds each)")
         for k, st in enumerate(stats, 1):
-            note = "  <- long (consider splitting in two)" if st["sec"] > 45 else ""
-            print("  slide %2d: %d sentence(s), about %2d s%s" % (k, st["sentences"], st["sec"], note))
-    print("Total: %d slides, about %d s, embedded audio: %s" % (rep["slides"], rep["totalSec"],
+            sec = st.get("sec", 0)
+            note = "  <- long (consider splitting in two)" if sec > 45 else ""
+            print("  slide %2d: %d sentence(s), about %2d s%s" % (k, st.get("sentences", 0), sec, note))
+    print("Total: %d slides, about %d s, embedded audio: %s" % (rep.get("slides", 0), rep.get("totalSec", 0),
           ("%d sentences" % rep["clips"]) if rep.get("clips") else "none (the viewer's device voice reads it)"))
     return print_issues(issues, lines)
 
@@ -261,12 +287,14 @@ def print_issues(issues, lines=None):
     warn = [i for i in issues if i.get("level") == "warn"]
     for i in ng + warn:
         where = []
-        if i.get("slide"):
-            where.append("slide %d" % i["slide"])
-        line = i.get("line") or (lines[i["slide"] - 1] if lines and i.get("slide") and i["slide"] <= len(lines) else None)
+        slide_no = i.get("slide")
+        if slide_no:
+            where.append("slide %d" % slide_no)
+        line = i.get("line") or (lines[slide_no - 1] if lines and isinstance(slide_no, int) and 1 <= slide_no <= len(lines) else None)
         if line:
             where.append("source line %d%s" % (line, "" if i.get("line") else "+"))
-        print("%s [%s] %s: %s" % (LABEL[i.get("level", "error")], ", ".join(where) or "deck", i["type"], i["msg"]))
+        level = i.get("level", "error")
+        print("%s [%s] %s: %s" % (LABEL.get(level, str(level).upper()), ", ".join(where) or "deck", i["type"], i["msg"]))
         hint = i.get("hint") or HINTS.get(i["type"])
         if hint:
             print("    Fix: " + hint)
@@ -292,6 +320,13 @@ def main():
     if a.pdf_notes and not a.pdf:
         print("ERROR: --pdf-notes requires --pdf FILE.")
         return 2
+    deck_path = pathlib.Path(a.deck).resolve()
+    for flag, target in (("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
+        if target:
+            tpath = pathlib.Path(target).resolve()
+            if tpath == deck_path or (tpath.exists() and deck_path.exists() and tpath.samefile(deck_path)):
+                print("ERROR: %s output path must not overwrite the input deck." % flag)
+                return 2
     try:
         rep = inspect(a.deck)
     except CheckError as e:
