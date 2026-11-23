@@ -125,7 +125,9 @@ def inspect(deck):
     for i in rep["issues"]:
         if isinstance(i, dict):
             i.setdefault("level", "error")
-    if re.search(r"<(script|link|img|iframe|image|use|video|audio|source)\b[^>]*\b(src|href)=[\"']((https?:)?//|file:)|url\([\"']?(https?:)?//|@import\b", src, re.I):
+    styles = "\n".join(re.findall(r"<style\b[^>]*>(.*?)</style>", src, re.I | re.S))
+    if (re.search(r"<(script|link|img|iframe|image|use|video|audio|source)\b[^>]*\b(src|href)=[\"']((https?:)?//|file:)|url\(\s*[\"']?((https?:)?//|file:)", src, re.I)
+            or re.search(r"@import\b", styles, re.I)):
         rep["issues"].append({"slide": 0, "type": "external", "level": "error",
                               "msg": "The deck loads an external URL. It will not show offline or when the file is opened by double-click.",
                               "hint": "Embed images as a data URI or inline SVG. Do not load external CSS, fonts or scripts."})

@@ -976,6 +976,16 @@ def main():
     ext_ci_deck = built(tmp, "ext-ci.html", HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><IMG SRC="HTTPS://example.com/x.png" alt="x"></section>')
     ok("check.inspect: catches uppercase HTTPS external URL", any(i["type"] == "external" for i in check.inspect(ext_ci_deck)["issues"]))
 
+    # Follow-up edge-case regression tests
+    _, _, _, iss_vcap_mis, _ = build.lint(HEAD + '<section class="slide"><p class="voice" data-caption="One. Two.">One.</p></section>')
+    ok("build: catches caption-mismatch between .voice body and data-caption", any(i["type"] == "caption-mismatch" for i in errors(iss_vcap_mis)))
+    _, _, _, iss_style_file, _ = build.lint(HEAD + '<section class="slide"><div style="background:url(file:///tmp/a.png)" data-say="Hi.">x</div></section>')
+    ok("build: rejects url(file://...) in inline style", any(i["type"] == "external" for i in errors(iss_style_file)))
+    vcap_only_deck = built(tmp, "vcap-only.html", HEAD + '<section class="slide"><span class="voice" data-caption="Caption fallback."></span></section>')
+    ok("player: .voice with data-caption only falls back to speaking caption", check.inspect(vcap_only_deck)["texts"] == ["Caption fallback."])
+    code_import_deck = built(tmp, "code-import.html", HEAD + '<section class="slide"><h2 data-say="CSS.">CSS</h2><pre><code>@import "theme.css";</code></pre></section>')
+    ok("check.inspect: does not false-positive @import inside slide <code>", not any(i["type"] == "external" for i in check.inspect(code_import_deck)["issues"]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
