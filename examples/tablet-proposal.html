@@ -236,13 +236,16 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.title, .slide.end { justify-content: center; align-items: flex-start; gap: 24px; background: linear-gradient(135deg, var(--accent-soft), var(--bg) 60%); }
 :root:where([data-theme="corporate"]) .slide.title, :root:where([data-theme="corporate"]) .slide.end { box-shadow: inset 18px 0 0 var(--accent), inset 24px 0 0 var(--bar-color); }
 :root:where([data-theme="mono"]) .slide.title, :root:where([data-theme="mono"]) .slide.end { box-shadow: inset 18px 0 0 var(--accent), inset 24px 0 0 var(--accent-2); }
-.slide.title::before, .slide.end::before { content: ""; display: var(--deco-display); position: absolute; right: -140px; top: -140px; width: 520px; height: 520px; border-radius: 50%; background: var(--accent); opacity: .14; }
-.slide.title::after, .slide.end::after { content: ""; display: var(--deco-display); position: absolute; right: 120px; bottom: 60px; width: 200px; height: 200px; border-radius: 50%; background: var(--accent-2); opacity: .22; }
+.slide.title::before, .slide.end::before { content: ""; display: var(--deco-display); position: absolute; right: -140px; top: -140px; width: 520px; height: 520px; border-radius: 50%; background: var(--accent); opacity: .14; pointer-events: none; }
+.slide.title::after, .slide.end::after { content: ""; display: var(--deco-display); position: absolute; right: 120px; bottom: 60px; width: 200px; height: 200px; border-radius: 50%; background: var(--accent-2); opacity: .22; pointer-events: none; }
 .slide.title .sub, .slide.end .sub { font-size: 36px; color: var(--muted); }
 .slide.section { justify-content: center; gap: 20px; background: var(--section-bg); background: linear-gradient(135deg, var(--section-bg), color-mix(in srgb, var(--section-bg) 82%, #000)); color: var(--section-fg); }
 .slide.section h2 { font-size: 72px; border: 0; padding: 0; }
 .slide.section .kicker, .slide.section .sub { color: var(--section-fg); opacity: .85; }
 .slide.section .sub { font-size: 34px; }
+.slide.section strong { color: var(--section-fg); text-decoration: underline; text-decoration-color: var(--accent-2); text-underline-offset: .15em; }
+.slide.section .badge { background: var(--section-fg); color: var(--section-bg); }
+.slide.section :not(pre) > code { background: rgba(255,255,255,.18); color: var(--section-fg); }
 
 /* columns and cards */
 .slide .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 32px; align-items: stretch; min-height: 0; }
@@ -290,6 +293,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:has(> img.bg) .kicker, .slide:has(> img.bg) strong { color: var(--accent-2); }
 .slide:has(> img.bg) .card, .slide:has(> img.bg) .box, .slide:has(> img.bg) ol.flow > li { color: var(--fg); text-shadow: none; }
 .slide:has(> img.bg) .card strong, .slide:has(> img.bg) .box strong { color: var(--accent); }
+.slide:has(> img.bg) :not(pre) > code { background: rgba(255,255,255,.18); color: #fff; }
 .slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; overflow: hidden; }
 .slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; flex: 0 1 auto; object-fit: contain; border-radius: min(14px, var(--radius)); }
 .slide figure:has(figcaption) img, .slide figure:has(figcaption) svg { max-height: calc(100% - 48px); }
@@ -426,7 +430,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #voice { max-width: 190px; height: 32px; margin: 0 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.4); background: rgba(0,0,0,.5); color: #fff; font: 500 13px var(--font); }
 @media (max-width: 640px) { #voice { display: none; } #btns button { width: 40px; } #btns #b-rate { width: auto; min-width: 40px; padding: 0 6px; } #btns #count { width: auto; padding: 0 8px; } }
 @media (max-width: 520px) { #time { display: none; } }
-@media (max-width: 440px) { #btns button { width: 34px; } #btns #b-rate { width: auto; min-width: 36px; padding: 0 4px; font-size: 13px; } #btns #count { width: auto; padding: 0 4px; font-size: 13px; } #btns svg { width: 22px; height: 22px; } #b-full { display: none !important; } }
+@media (max-width: 440px) { #controls { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); } #btns { gap: 0; } #btns button { width: 34px; } #btns #b-rate { width: auto; min-width: 36px; padding: 0 4px; font-size: 13px; } #btns #count { width: auto; padding: 0 4px; font-size: 13px; } #btns svg { width: 22px; height: 22px; } #b-full { display: none !important; } }
 
 /* --- start screen --- */
 #start { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; background: rgba(8,12,22,.72); color: #fff; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
@@ -449,6 +453,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #overview[hidden] { display: none; }
 #ov-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 14px; font: 800 18px var(--font); }
 #ov-close { width: 44px; height: 40px; border: 0; border-radius: 8px; background: rgba(255,255,255,.14); color: #fff; font-size: 22px; cursor: pointer; }
+#ov-close:hover { background: rgba(255,255,255,.24); }
 #ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 40vw), 1fr)); gap: 16px; }
 .ov-item { position: relative; display: block; width: 100%; padding: 0; border: 3px solid transparent; border-radius: 10px; background: none; cursor: pointer; overflow: hidden; aspect-ratio: 16 / 9; }
 .ov-item:hover { border-color: rgba(255,255,255,.6); }
@@ -489,6 +494,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #hlp-card { width: min(500px, 94vw); max-height: 86vh; overflow-y: auto; background: #131c2e; color: #fff; border: 1px solid rgba(255,255,255,.16); border-radius: 14px; padding: 18px 20px; box-shadow: 0 20px 50px rgba(0,0,0,.55); font: 500 14px/1.5 var(--font); }
 #hlp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font: 800 17px var(--font); }
 #hlp-close { width: 38px; height: 34px; border: 0; border-radius: 8px; background: rgba(255,255,255,.14); color: #fff; font-size: 22px; cursor: pointer; }
+#hlp-close:hover { background: rgba(255,255,255,.24); }
 #hlp-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; margin: 0; }
 #hlp-list dt { display: flex; gap: 4px; flex-wrap: wrap; }
 #hlp-list dd { margin: 0; color: rgba(255,255,255,.86); }
@@ -504,12 +510,16 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   html, body { height: auto; overflow: visible; background: #fff; }
   #player { position: static; height: auto; overflow: visible; background: none; }
   #stage { position: static; transform: none !important; height: auto; overflow: visible; }
-  .slide { position: relative; inset: auto; width: 1280px; height: 720px; opacity: 1 !important; visibility: visible !important; break-after: page; page-break-after: always; }
+  .slide { position: relative; inset: auto; width: 1280px; height: 720px; opacity: 1 !important; visibility: visible !important; transition: none !important; break-after: page; page-break-after: always; }
+  .slide:last-of-type { break-after: auto; page-break-after: auto; }
   .with-notes .slide { break-after: auto; page-break-after: auto; }
   .with-notes .print-notes { display: block; width: 1280px; padding: 36px 64px 40px; background: #fff; color: #1c2333; font: 500 20px/1.75 var(--font); border-top: 4px solid var(--accent); break-after: page; page-break-after: always; }
+  .with-notes .print-notes:last-of-type { break-after: auto; page-break-after: auto; }
   .with-notes .print-notes h4 { margin: 0 0 14px; font-size: 16px; font-weight: 800; color: #475569; letter-spacing: .04em; }
   .with-notes .print-notes p { margin: 0 0 8px; }
   .slide .pending { opacity: 1 !important; transform: none !important; }
+  .slide .speaking { border-color: var(--line) !important; box-shadow: var(--shadow) !important; }
+  .slide tbody tr.speaking > * { background-color: transparent !important; }
   .slide-footer { transform: none !important; }
   #controls, #start, #caption, #toast, #overview, #script, #help { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -669,38 +679,38 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 <div id="controls">
   <div id="bar"></div>
   <div id="btns">
-    <button id="b-prev" type="button" data-ta="prev" data-key="←"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-    <button id="b-play" type="button" data-ta="playPause" data-key="Space"><svg viewBox="0 0 24 24"><path id="i-play" d="M6 3.5v17L21 12z"/></svg></button>
-    <button id="b-next" type="button" data-ta="next" data-key="→"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+    <button id="b-prev" type="button" data-ta="prev" data-key="←"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+    <button id="b-play" type="button" data-ta="playPause" data-key="Space"><svg aria-hidden="true" viewBox="0 0 24 24"><path id="i-play" d="M6 3.5v17L21 12z"/></svg></button>
+    <button id="b-next" type="button" data-ta="next" data-key="→"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
     <button id="count" type="button" data-ta="overview" data-key="G"></button>
     <span id="time"></span>
     <span class="sp"></span>
     <select id="voice" data-ta="voice" hidden></select>
     <button id="b-rate" type="button" data-ta="rate" data-key="&lt; &gt;">1x</button>
-    <button id="b-mute" type="button" data-ta="sound" data-key="M"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm11.5-1.2v8.4a4.5 4.5 0 0 0 0-8.4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
-    <button id="b-cc" type="button" data-ta="captions" data-key="C"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm1 9h8v2H5zm10 0h4v2h-4zM5 9h4v2H5zm6 0h8v2h-8z"/></svg></button>
-    <button id="b-script" type="button" data-ta="transcript" data-key="T"><svg viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h16v2H4zm0 4h11v2H4zm0 4h11v2H4z"/></svg></button>
-    <button id="b-grid" type="button" data-ta="overview" data-key="G"><svg viewBox="0 0 24 24"><path d="M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z"/></svg></button>
-    <button id="b-full" type="button" data-ta="fullscreen" data-key="F"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+    <button id="b-mute" type="button" data-ta="sound" data-key="M" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm11.5-1.2v8.4a4.5 4.5 0 0 0 0-8.4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
+    <button id="b-cc" type="button" data-ta="captions" data-key="C" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm1 9h8v2H5zm10 0h4v2h-4zM5 9h4v2H5zm6 0h8v2h-8z"/></svg></button>
+    <button id="b-script" type="button" data-ta="transcript" data-key="T"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h16v2H4zm0 4h11v2H4zm0 4h11v2H4z"/></svg></button>
+    <button id="b-grid" type="button" data-ta="overview" data-key="G"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z"/></svg></button>
+    <button id="b-full" type="button" data-ta="fullscreen" data-key="F"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
   </div>
 </div>
-<div id="overview" role="dialog" data-ta="overview" hidden>
+<div id="overview" role="dialog" aria-modal="true" data-ta="overview" hidden>
   <div id="ov-head"><span data-t="overview"></span><button id="ov-close" type="button" data-ta="closeOverview" data-key="Esc">×</button></div>
   <div id="ov-grid"></div>
 </div>
-<aside id="script" role="dialog" data-ta="transcript" hidden>
+<aside id="script" role="dialog" aria-modal="true" data-ta="transcript" hidden>
   <div id="sc-head"><span data-t="transcript"></span><button id="sc-copy" type="button" data-t="copy"></button><button id="sc-close" type="button" data-ta="closeOverview" data-key="Esc">×</button></div>
   <div id="sc-search-wrap"><input id="sc-search" type="search" autocomplete="off"><span id="sc-count"></span></div>
   <div id="sc-body"></div>
   <div id="sc-empty" data-t="noMatch" hidden></div>
 </aside>
-<div id="help" role="dialog" data-ta="shortcuts" hidden>
+<div id="help" role="dialog" aria-modal="true" data-ta="shortcuts" hidden>
   <div id="hlp-card">
     <div id="hlp-head"><span data-t="shortcuts"></span><button id="hlp-close" type="button" data-ta="closeOverview" data-key="Esc">×</button></div>
     <dl id="hlp-list"></dl>
   </div>
 </div>
-<div id="toast" role="status"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>
 
 <script>
@@ -755,7 +765,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     get: function (k, d) { try { var v = localStorage.getItem('hs:' + k); return v === null ? d : v; } catch (e) { return d; } },
     set: function (k, v) { try { localStorage.setItem('hs:' + k, v); } catch (e) {} }
   };
-  if (qs.get('theme')) root.setAttribute('data-theme', qs.get('theme')); // preview another theme without rebuilding
+  var VALID_THEMES = ['light', 'dark', 'corporate', 'warm', 'forest', 'sakura', 'mono', 'pop', 'neon', 'chalk'];
+  if (qs.get('theme') && VALID_THEMES.indexOf(qs.get('theme')) >= 0) root.setAttribute('data-theme', qs.get('theme')); // preview another theme without rebuilding
   if (STILL || CHECK || qs.has('noanim')) root.classList.add('no-anim');
   if (STILL) root.classList.add('still');
 
@@ -765,8 +776,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var vd = document.getElementById('voice-data');
     if (vd) {
       var vobj = JSON.parse(vd.textContent) || {};
-      clips = vobj.clips || {};
-      clipDurs = vobj.durations || {};
+      if (vobj.clips && typeof vobj.clips === 'object' && !Array.isArray(vobj.clips)) clips = vobj.clips;
+      if (vobj.durations && typeof vobj.durations === 'object' && !Array.isArray(vobj.durations)) clipDurs = vobj.durations;
     }
   } catch (e) {}
   var hasClips = Object.keys(clips).length > 0, audio = hasClips ? new Audio() : null, audioBroken = false;
@@ -880,7 +891,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (synth && voice) try { var u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = voice.lang; u.voice = voice; synth.speak(u); } catch (e) {}
   }
   function speak(text, my, done) {
-    var fired = false, wd = 0, st = 0, dur = (clipDurs[text] > 0 ? clipDurs[text] * 1000 : est(text)) / rate;
+    var baseDur = clipDurs[text] > 0 ? clipDurs[text] * 1000 : est(text);
+    var fired = false, wd = 0, st = 0, dur = baseDur / rate, wdDur = baseDur / Math.min(rate, 0.75) * 2.5 + 6000;
     function fin() { if (fired) return; fired = true; clearTimeout(wd); clearTimeout(st); if (my === tok && playing) done(); }
     function silent() { clearTimeout(wd); clearTimeout(st); wd = setTimeout(fin, dur); }
     if (muted || !text.trim()) { audioPausedText = null; silent(); return; }
@@ -895,7 +907,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         preloadNext();
         var pr = audio.play(); if (pr && pr.catch) pr.catch(function (err) { if (err && err.name === 'AbortError') return; if (err && err.name === 'NotAllowedError') { if (!fired && my === tok) { clearTimeout(wd); silent(); } return; } afail(); });
       } catch (e) { afail(); return; }
-      wd = setTimeout(fin, dur * 2.5 + 6000);
+      wd = setTimeout(fin, wdDur);
       return;
     }
     if (synth && !voice) loadVoices(); // the voice list can arrive late
@@ -946,7 +958,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     timeline[cur].forEach(function (c) { if (c.reveal) c.el.classList.toggle('pending', !full); });
     void sl.offsetWidth; sl.classList.remove('jump');
     cueIdx = 0; partIdx = 0; mid = !full; inPart = false; setCaption('');
-    try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) {}
+    if (!CHECK) { try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) {} }
     updateUI();
   }
   function setCaption(t) { capText.textContent = t || ''; capEl.classList.toggle('show', !!t && capsOn); }
@@ -1020,6 +1032,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   }
   function go(i) {
     if (i < 0 || i >= slides.length) return;
+    clearJump(); hideBarTip();
     audioPausedText = null;
     tok++; stopSpeech(); ended = false;
     if (playing) { showSlide(i, false); mid = true; var my = ++tok; wait(500, my, step); }
@@ -1076,6 +1089,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     return m + ':' + (r < 10 ? '0' : '') + r;
   }
   function updateProgress(force) {
+    if (!slides.length) return;
     var T = timeline[cur], done = 0, total = Math.max(1, slideDur[cur] - 1200);
     for (var k = 0; k < cueIdx && k < T.length; k++) done += T[k].dur;
     if (T[cueIdx]) for (var j = 0; j < partIdx; j++) done += T[cueIdx].parts[j].dur;
@@ -1105,7 +1119,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       else f.style.width = pct + '%';
     });
   }
-  var PLAY = 'M6 3.5v17L21 12z', PAUSE = 'M6 4h4v16H6zM14 4h4v16h-4z';
+  var PLAY = 'M6 3.5v17L21 12z', PAUSE = 'M6 4h4v16H6zM14 4h4v16h-4z', lastMediaCur = -1;
   function updateUI() {
     player.classList.toggle('playing', playing);
     $('#i-play').setAttribute('d', playing ? PAUSE : PLAY);
@@ -1113,13 +1127,17 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     $('#count').textContent = (cur + 1) + ' / ' + slides.length;
     $('#count').setAttribute('aria-label', (cur + 1) + ' / ' + slides.length + ' — ' + tr('overview'));
     $('#b-rate').textContent = rate + 'x';
-    $('#b-mute').classList.toggle('off', muted || ((!hasClips || audioBroken) && (ttsBroken || !synth || (noVoiceToast && !voice))));
+    var soundOff = muted || ((!hasClips || audioBroken) && (ttsBroken || !synth || (noVoiceToast && !voice)));
+    $('#b-mute').classList.toggle('off', soundOff);
+    $('#b-mute').setAttribute('aria-pressed', soundOff ? 'false' : 'true');
     $('#b-cc').classList.toggle('off', !capsOn);
+    $('#b-cc').setAttribute('aria-pressed', capsOn ? 'true' : 'false');
     updateProgress();
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
-        if (window.MediaMetadata && slides[cur]) {
+        if (window.MediaMetadata && slides[cur] && lastMediaCur !== cur) {
+          lastMediaCur = cur;
           navigator.mediaSession.metadata = new MediaMetadata({ title: document.title, artist: slides[cur].getAttribute('aria-label') || '' });
         }
       } catch (e) {}
@@ -1190,6 +1208,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       var c = s.cloneNode(true); c.classList.add('active'); c.removeAttribute('aria-label'); c.removeAttribute('role');
       $$('.pending, .speaking', c).forEach(function (e) { e.classList.remove('pending', 'speaking'); });
       $$('[id]', c).forEach(function (e) { e.removeAttribute('id'); });
+      $$('video, audio', c).forEach(function (m) { m.removeAttribute('autoplay'); m.muted = true; try { m.pause(); } catch (e) {} });
       f.appendChild(c); b.appendChild(f);
       var n = document.createElement('span'); n.className = 'ov-num'; n.textContent = i + 1; b.appendChild(n);
       var d = document.createElement('span'); d.className = 'ov-dur'; d.textContent = fmtClock(slideDur[i]); b.appendChild(d);
@@ -1379,7 +1398,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   var swiped = false, tx = 0, ty = 0, multi = false;
   stage.addEventListener('click', function (e) {
     if (swiped) { swiped = false; return; }
-    if (e.target.closest('a,button,input,select,textarea,summary,video,audio,[data-noplay]')) return;
+    if (e.target.closest('a,button,input,select,textarea,summary,label,video,audio,[data-noplay]')) return;
     toggle();
   });
   player.addEventListener('touchstart', function (e) { if (e.touches.length > 1) multi = true; else { multi = false; tx = e.touches[0].clientX; ty = e.touches[0].clientY; } swiped = false; poke(); }, { passive: true });
@@ -1407,6 +1426,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       if (k === '/' && scSearch) { scSearch.focus(); scSearch.select(); e.preventDefault(); return; }
       if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Home' || k === 'End') {
         var lines = $$('.sc-line:not([hidden])', scBody), li = lines.indexOf(document.activeElement);
+        if (k === 'ArrowUp' && li === 0 && scSearch) { scSearch.focus(); e.preventDefault(); return; }
         if (lines.length) {
           var nli = k === 'Home' ? 0 : k === 'End' ? lines.length - 1 : (li < 0 ? 0 : li + (k === 'ArrowDown' ? 1 : -1));
           nli = Math.max(0, Math.min(lines.length - 1, nli));
@@ -1570,7 +1590,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   else if (qs.has('overview')) { startEl.hidden = true; openOverview(); }
   else if (qs.has('transcript')) { startEl.hidden = true; openScript(); }
   else if (qs.has('autoplay')) play(qs.has('mute'));
-  window.addEventListener('hashchange', function () { var n = parseInt(location.hash.replace('#', ''), 10); if (n > 0 && n - 1 !== cur) go(n - 1); });
+  window.addEventListener('hashchange', function () { var raw = (location.hash || '').replace('#', ''), n = raw ? parseInt(raw, 10) : 1; if (n > 0 && n <= slides.length && n - 1 !== cur) go(n - 1); });
 })();
 </script>
 </body>

@@ -156,7 +156,9 @@ SELFTEST_JS = r"""
     ok('transcript search: shows match count', $('#sc-count').textContent === filteredLines + ' / ' + totalLines && $('#sc-empty').hidden);
     $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     ok('transcript search: ArrowDown focuses first matching line', document.activeElement && document.activeElement.classList.contains('sc-line'));
-    ok('transcript open: start screen is inert', $('#start').inert === true);
+    key('ArrowUp');
+    ok('transcript search: ArrowUp from first line returns focus to search', document.activeElement === $('#sc-search'));
+    ok('transcript open: start screen is inert and dialog is aria-modal', $('#start').inert === true && $('#script').getAttribute('aria-modal') === 'true');
     $('#sc-search').value = '___no_match___'; $('#sc-search').dispatchEvent(new Event('input'));
     ok('transcript search: shows empty state on 0 matches', !$('#sc-empty').hidden && $('#sc-count').textContent === '0 / ' + totalLines);
     key('Escape'); await sleep(300);
@@ -173,8 +175,8 @@ SELFTEST_JS = r"""
     key('Escape'); await sleep(300);
     ok('Esc: shortcuts help closes and playback resumes', $('#help').hidden && playing());
 
-    key('c'); ok('C: captions off', !$('#caption').classList.contains('show'));
-    key('c'); await sleep(50); ok('C: captions on', $('#caption').classList.contains('show') || cap() === '');
+    key('c'); ok('C: captions off', !$('#caption').classList.contains('show') && $('#b-cc').getAttribute('aria-pressed') === 'false');
+    key('c'); await sleep(50); ok('C: captions on', ($('#caption').classList.contains('show') || cap() === '') && $('#b-cc').getAttribute('aria-pressed') === 'true');
     const r0 = $('#b-rate').textContent; key('>');
     ok('>: speed changes', $('#b-rate').textContent !== r0, $('#b-rate').textContent);
     await sleep(600); ok('after a speed change: still playing', playing() && cap().length > 0);
