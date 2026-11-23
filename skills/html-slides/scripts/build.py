@@ -88,11 +88,10 @@ IMAGE_MIMES = {
     ".bmp": "image/bmp",
     ".ico": "image/x-icon",
 }
-IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.I | re.S)
-SRC_ATTR_RE = re.compile(r"""(\bsrc\s*=\s*)(?:"([^"]*)"|'([^']*)')""", re.I | re.S)
+SRC_ATTR_RE = re.compile(r"""(?<=[\s/])(src\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))""", re.I | re.S)
 LARGE_IMAGE_BYTES = 2 * 1024 * 1024
 INSIDE_SLIDES = 'Put all content inside <section class="slide"> ... </section>.'
-NO_EXTERNAL = "Embed images as a data URI or inline SVG. Do not load external CSS, fonts or scripts."
+NO_EXTERNAL = "Use a local image file (build.py embeds it automatically) or inline SVG. Do not load external URLs."
 
 
 def fail(msg):
@@ -136,7 +135,7 @@ def read_source(path):
 def _local_image_path(src_val, base_dir):
     """Resolve a local <img src> path against base_dir, or return None for URLs / data URIs."""
     s = (src_val or "").strip()
-    if not s or re.match(r"^(data:|blob:|https?:|//|#)", s, re.I):
+    if not s or re.match(r"^(data:|blob:|https?:|file:|//|#)", s, re.I):
         return None
     raw = urllib.parse.unquote(s.split("#", 1)[0].split("?", 1)[0])
     p = pathlib.Path(raw)
@@ -153,18 +152,53 @@ def _image_mime(path):
     return guessed if (guessed and guessed.startswith("image/")) else "application/octet-stream"
 
 
+class _ImgLocator(HTMLParser):
+    """Locate real <img> start tags (ignoring HTML comments and attribute values containing '>')."""
+
+    def __init__(self, body):
+        super().__init__(convert_charrefs=False)
+        self.body = body
+        self.line_offsets = [0] + [m.end() for m in re.finditer("\n", body)]
+        self.tags = []
+
+    def _record(self, tag):
+        if tag != "img":
+            return
+        line, col = self.getpos()
+        start = self.line_offsets[line - 1] + col
+        raw = self.get_starttag_text() or ""
+        if raw:
+            self.tags.append((start, start + len(raw)))
+
+    def handle_starttag(self, tag, attrs):
+        self._record(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        self._record(tag)
+
+
 def inline_local_images(slides_html, base_dir):
     """Embed local <img src="..."> files as base64 data URIs so the output remains a single self-contained HTML file."""
     base = pathlib.Path(base_dir).resolve()
+    loc = _ImgLocator(slides_html)
+    loc.feed(slides_html)
+    loc.close()
+    if not loc.tags:
+        return slides_html
     cache = {}
-
-    def replace_img(tag_match):
-        tag = tag_match.group(0)
+    out, prev = [], 0
+    for start, end in loc.tags:
+        out.append(slides_html[prev:start])
+        tag = slides_html[start:end]
 
         def replace_src(attr_match):
             prefix = attr_match.group(1)
-            val = attr_match.group(2) if attr_match.group(2) is not None else attr_match.group(3)
-            quote = '"' if attr_match.group(2) is not None else "'"
+            if attr_match.group(2) is not None:
+                val, quote = attr_match.group(2), '"'
+            elif attr_match.group(3) is not None:
+                val, quote = attr_match.group(3), "'"
+            else:
+                val, quote = attr_match.group(4), '"'
             path = _local_image_path(html.unescape(val), base)
             if path is None or not path.is_file():
                 return attr_match.group(0)
@@ -175,19 +209,21 @@ def inline_local_images(slides_html, base_dir):
                 cache[path] = uri
             return prefix + quote + uri + quote
 
-        return SRC_ATTR_RE.sub(replace_src, tag, count=1)
-
-    return IMG_TAG_RE.sub(replace_img, slides_html)
+        out.append(SRC_ATTR_RE.sub(replace_src, tag, count=1))
+        prev = end
+    out.append(slides_html[prev:])
+    return "".join(out)
 
 
 class Lint(HTMLParser):
     """Source lint. Collects {line, type, level, msg, hint} dicts in self.issues."""
 
-    def __init__(self, custom_classes, dense=False, base_dir=None):
+    def __init__(self, custom_classes, dense=False, base_dir=None, inline_images=True):
         super().__init__(convert_charrefs=True)
         self.custom = custom_classes
         self.deck_dense = dense
         self.base_dir = pathlib.Path(base_dir).resolve() if base_dir is not None else None
+        self.inline_images = inline_images
         self.issues = []
         self.stack = []     # open tags: dict(tag, line, cls, kids, text)
         self.slides = []    # dict(line, cls, cues)
@@ -278,15 +314,19 @@ class Lint(HTMLParser):
                 self.add("error", "external", "<%s> loads an external URL (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
         if tag == "img" and self.base_dir is not None:
             img_src = (a.get("src") or "").strip()
-            img_path = _local_image_path(img_src, self.base_dir)
-            if img_path is not None:
-                if not img_path.is_file():
-                    self.add("error", "missing-image", 'Image file not found: "%s" (looked for %s).' % (img_src, img_path),
-                             "Check the image path relative to the .slides.html file, or place the image in that folder.")
-                elif img_path.stat().st_size > LARGE_IMAGE_BYTES:
-                    mb = img_path.stat().st_size / (1024 * 1024)
-                    self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
-                             "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
+            if re.match(r"^file:", img_src, re.I):
+                self.add("error", "external", '<img> uses a file:// URL ("%s"), which breaks on other machines.' % img_src,
+                         "Use a path relative to the .slides.html file (for example images/photo.png) so build.py can embed it.")
+            else:
+                img_path = _local_image_path(img_src, self.base_dir)
+                if img_path is not None:
+                    if not img_path.is_file():
+                        self.add("error", "missing-image", 'Image file not found: "%s" (looked for %s).' % (img_src, img_path),
+                                 "Check the image path relative to the .slides.html file, or place the image in that folder.")
+                    elif self.inline_images and img_path.stat().st_size > LARGE_IMAGE_BYTES:
+                        mb = img_path.stat().st_size / (1024 * 1024)
+                        self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
+                                 "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
         if tag not in VOID:
             self.stack.append({"tag": tag, "line": line, "cls": cls, "kids": 0, "text": ""})
 
@@ -443,10 +483,10 @@ def parse_source(text):
     return meta, css, slides, problems
 
 
-def lint(text, base_dir=None):
+def lint(text, base_dir=None, inline_images=True):
     meta, css, slides, problems = parse_source(text)
     custom = set(re.findall(r"\.([A-Za-z_][\w-]*)", css))
-    p = Lint(custom, dense=meta["density"] == "dense", base_dir=base_dir)
+    p = Lint(custom, dense=meta["density"] == "dense", base_dir=base_dir, inline_images=inline_images)
     p.feed(text)
     p.close()
     issues = problems + p.finish()
@@ -583,7 +623,7 @@ def extract(deck_path, out_path, *, overwrite=True):
 
 def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None, vtt=None, inline_images=True):
     # 1. source lint
-    meta, css, slides, issues, lines = lint(read_source(src), base_dir=src.parent)
+    meta, css, slides, issues, lines = lint(read_source(src), base_dir=src.parent, inline_images=inline_images)
     if any(i["level"] == "error" for i in issues):
         print("Source lint: %s" % src.name)
         check.print_issues(issues)
