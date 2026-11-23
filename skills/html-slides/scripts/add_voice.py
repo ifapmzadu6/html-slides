@@ -682,12 +682,12 @@ def compress(raw, ext, tmp):
     if shutil.which("ffmpeg"):
         dst = tmp / "out.mp3"
         r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-b:a", "96k", str(dst)], capture_output=True)
-        if r.returncode == 0 and dst.exists():
+        if r.returncode == 0 and dst.is_file() and dst.stat().st_size > 0:
             return dst.read_bytes(), "audio/mpeg"
     if shutil.which("afconvert"):
         dst = tmp / "out.m4a"
         r = subprocess.run(["afconvert", "-f", "m4af", "-d", "aac", "-b", "96000", "-c", "1", str(src), str(dst)], capture_output=True)
-        if r.returncode == 0 and dst.exists():
+        if r.returncode == 0 and dst.is_file() and dst.stat().st_size > 0:
             return dst.read_bytes(), "audio/mp4"
     if ext == ".wav":
         return raw, "audio/wav"
@@ -761,12 +761,18 @@ def main():
     action.add_argument("--trim-clip", nargs=2, metavar=("SENTENCE", "END_SECONDS"),
                         help="keep the start of an embedded sentence clip up to END_SECONDS")
     a = ap.parse_args()
+    if not (math.isfinite(a.speed) and a.speed > 0):
+        print("ERROR: --speed must be a finite number greater than zero.")
+        return 2
+    if a.temperature is not None and not (math.isfinite(a.temperature) and a.temperature >= 0):
+        print("ERROR: --temperature must be a finite number greater than or equal to zero.")
+        return 2
 
     deck = pathlib.Path(a.deck).resolve()
     try:
         with deck_lock(deck):
             src = deck.read_text(encoding="utf-8")
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         print("ERROR: could not read the deck: %s" % e)
         return 2
     if ENGINE not in src:

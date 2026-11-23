@@ -36,9 +36,13 @@ document.querySelectorAll('.row h2 code').forEach(function (c) {
   c.title = 'Click to copy "theme: ' + name + '"';
   c.addEventListener('click', function () {
     var txt = 'theme: ' + name;
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(function () {});
-    c.textContent = 'Copied!'; c.classList.add('copied');
-    setTimeout(function () { c.textContent = name; c.classList.remove('copied'); }, 1100);
+    function show() { c.textContent = 'Copied!'; c.classList.add('copied'); setTimeout(function () { c.textContent = name; c.classList.remove('copied'); }, 1100); }
+    function fallback() {
+      var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); try { if (document.execCommand('copy')) show(); } catch (e) {} document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(show, fallback);
+    else fallback();
   });
 });
 document.querySelectorAll('.shot').forEach(function (s) {

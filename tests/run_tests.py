@@ -156,10 +156,15 @@ SELFTEST_JS = r"""
     ok('transcript search: shows match count', $('#sc-count').textContent === filteredLines + ' / ' + totalLines && $('#sc-empty').hidden);
     $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     ok('transcript search: ArrowDown focuses first matching line', document.activeElement && document.activeElement.classList.contains('sc-line'));
+    ok('transcript open: start screen is inert', $('#start').inert === true);
     $('#sc-search').value = '___no_match___'; $('#sc-search').dispatchEvent(new Event('input'));
     ok('transcript search: shows empty state on 0 matches', !$('#sc-empty').hidden && $('#sc-count').textContent === '0 / ' + totalLines);
     key('Escape'); await sleep(300);
-    ok('Esc: transcript closes and playback resumes', $('#script').hidden && playing());
+    ok('Esc: transcript closes and playback resumes', $('#script').hidden && playing() && $('#start').inert === false);
+    key('t'); $('#sc-search').value = 'スマホ'; $('#sc-search').dispatchEvent(new Event('input'));
+    $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await sleep(300);
+    ok('transcript search: Enter jumps to first matching sentence', $('#script').hidden && playing());
+    ok('slide counter: aria-label includes current slide number', $('#count').getAttribute('aria-label').indexOf(cur() + ' / ' + N) === 0, $('#count').getAttribute('aria-label'));
     key('t'); document.querySelectorAll('.sc-slide')[2].click(); await sleep(300);
     ok('transcript click: jumps to slide 3 and resumes', cur() === 3 && playing() && $('#script').hidden);
 
@@ -348,6 +353,34 @@ def main():
     typo_meta = '<!--\ntitle: t\nthme: dark\n-->\n<section class="slide title"><h1 data-say="Hello.">x</h1></section>'
     typo_issues = build.lint(typo_meta)[3]
     ok("lint: warns on unknown setting typo with suggestion", any(i["type"] == "unknown-setting" and i["level"] == "warn" and "theme" in i["hint"] for i in typo_issues), typo_issues)
+    no_title_with_warn = '\n\n<!--\ntheme: light\nthme: dark\n-->\n<section class="slide title"><h1 data-say="Hello.">x</h1></section>'
+    ntw_issues = build.lint(no_title_with_warn)[3]
+    ok("lint: no-title-setting still errors alongside warnings", any(i["type"] == "no-title-setting" and i["level"] == "error" for i in ntw_issues), ntw_issues)
+    ok("lint: unknown-setting reports exact line after leading blanks", any(i["type"] == "unknown-setting" and i["line"] == 5 for i in ntw_issues), ntw_issues)
+    empty_lang = '<!--\ntitle: t\nlang:\ndensity:\n-->\n<section class="slide title"><h1 data-say="Hello.">x</h1></section>'
+    el_meta, _, _, el_issues, _ = build.lint(empty_lang)
+    ok("lint: empty lang/density falls back to defaults", not errors(el_issues) and el_meta["lang"] == "ja" and el_meta["density"] == "normal")
+    ext_css = '<!--\ntitle: t\n-->\n<style>@import url("https://example.com/a.css");</style>\n<section class="slide title"><h1 data-say="Hello.">x</h1></section>'
+    ok("lint: rejects external URL/@import in custom <style>", any(i["type"] == "external" for i in errors(build.lint(ext_css)[3])))
+    nested_fb = built(tmp, "nested-fb.html", '<!--\ntitle: t\n-->\n<section class="slide title"><ul><li><p>OnlyOnce</p></li></ul></section>')
+    ok("fallback narration: does not duplicate nested li>p text", check.inspect(nested_fb)["texts"] == ["OnlyOnce"], check.inspect(nested_fb)["texts"])
+    bin_file = tmp / "binary.dat"
+    bin_file.write_bytes(b"\xff\xfe\x00\x01")
+    try:
+        check.inspect(bin_file)
+        ok("check.inspect: raises CheckError on binary file", False)
+    except check.CheckError:
+        ok("check.inspect: raises CheckError on binary file", True)
+    r_pdf_notes = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(nested_fb), "--pdf-notes"], capture_output=True, text=True)
+    ok("check.py: rejects --pdf-notes without --pdf", r_pdf_notes.returncode == 2)
+    r_bad_spd = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(nested_fb), "--speed", "0"], capture_output=True, text=True)
+    ok("add_voice.py: rejects --speed 0 on all platforms", r_bad_spd.returncode == 2)
+    r_bad_tmp = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(nested_fb), "--temperature", "-1"], capture_output=True, text=True)
+    ok("add_voice.py: rejects negative --temperature", r_bad_tmp.returncode == 2)
+    r_bin_v = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(bin_file)], capture_output=True, text=True)
+    ok("add_voice.py: handles binary file cleanly without traceback", r_bin_v.returncode == 2 and "Traceback" not in r_bin_v.stderr)
+    r_bld_notes = subprocess.run([sys.executable, str(SKILL / "scripts" / "build.py"), str(SKILL / "assets" / "starter.slides.html"), "--pdf-notes"], capture_output=True, text=True)
+    ok("build.py: rejects --pdf-notes without --pdf", r_bld_notes.returncode == 2)
     mixed = "本当ですか！？はい。「そうです。」 It works. Yes!"
     ok("sentence splitting matches the player", build.sentences(mixed) == ["本当ですか！？", "はい。", "「そうです。」", "It works.", "Yes!"], build.sentences(mixed))
 

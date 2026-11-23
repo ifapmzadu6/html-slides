@@ -471,7 +471,8 @@ class SourceStyles(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "style" and self.start is not None:
             close = self.source_offset()
-            end = self.body.index(">", close) + 1
+            gt = self.body.find(">", close)
+            end = (gt + 1) if gt >= 0 else len(self.body)
             self.blocks.append((self.start, end, self.body[self.content_start:close].strip()))
             self.start = None
 
@@ -496,11 +497,15 @@ def parse_source(text):
     problems = []
     m = HEADER.match(text)
     if m and re.search(r"^\s*(title|theme|lang|density|footer)\s*:", m.group(1), re.M):
-        for offset, line in enumerate(m.group(1).splitlines(), 1):
+        header_start = text[:m.start(1)].count("\n") + 1
+        for offset, line in enumerate(m.group(1).splitlines(), header_start):
             k, sep, v = line.partition(":")
             key = k.strip().lower()
             if sep and key in meta:
-                meta[key] = v.strip()
+                val = v.strip()
+                if key in ("lang", "density") and not val:
+                    continue
+                meta[key] = val
             elif sep and re.fullmatch(r"[a-z][a-z0-9_-]*", key):
                 problems.append({"line": offset, "slide": 0, "type": "unknown-setting", "level": "warn",
                                  "msg": 'Setting "%s" is not recognised (it has no effect).' % k.strip(),
@@ -510,7 +515,7 @@ def parse_source(text):
         body = text
         problems.append({"line": 1, "slide": 0, "type": "no-header", "level": "error", "msg": "The source does not start with the settings comment.",
                          "hint": "Start the file with these four lines:\n        <!--\n        title: the deck title\n        theme: light\n        -->"})
-    if m and not meta["title"] and not problems:
+    if m and not meta["title"] and not any(p["type"] == "no-header" for p in problems):
         problems.append({"line": 1, "slide": 0, "type": "no-title-setting", "level": "error", "msg": "The settings comment has no title.",
                          "hint": 'Add a line "title: the deck title".'})
     if meta["density"] not in ("normal", "dense"):
@@ -520,6 +525,10 @@ def parse_source(text):
         problems.append({"line": 1, "slide": 0, "type": "unknown-theme", "level": "error", "msg": 'Theme "%s" does not exist.' % meta["theme"],
                          "hint": near(meta["theme"], THEMES) + "Available themes: " + ", ".join(THEMES) + "."})
     css, slides = SourceStyles(body).split()
+    if css and re.search(r"url\(\s*[\"']?(https?:)?//|@import\b", css, re.I):
+        problems.append({"line": 1, "slide": 0, "type": "external", "level": "error",
+                         "msg": "<style> loads an external URL or @import (it will not show when the deck is opened offline).",
+                         "hint": NO_EXTERNAL})
     for bad in ("SLIDES:START", "SLIDES:END", "ENGINE JS"):
         if bad in slides:
             problems.append({"line": text[:text.index(bad)].count("\n") + 1, "slide": 0, "type": "whole-page", "level": "error",
@@ -760,12 +769,16 @@ def main():
     if a.extract:
         if a.watch:
             fail("--watch cannot be combined with --extract.")
-        if a.pdf:
+        if a.shots:
+            fail("--shots cannot be combined with --extract.")
+        if a.pdf or a.pdf_notes:
             fail("--pdf cannot be combined with --extract.")
         if a.script:
             fail("--script cannot be combined with --extract.")
         if a.vtt:
             fail("--vtt cannot be combined with --extract.")
+        if a.no_inline_images:
+            fail("--no-inline-images cannot be combined with --extract.")
         if a.open:
             fail("--open cannot be combined with --extract.")
         if not a.out and os.path.lexists(out):
@@ -780,6 +793,10 @@ def main():
             fail("Could not extract to %s: %s" % (out, e))
         return 0
 
+    if a.pdf_notes and not a.pdf:
+        fail("--pdf-notes requires --pdf FILE.")
+    if a.shots and a.no_render:
+        fail("--shots cannot be combined with --no-render (screenshots require headless Chrome/Edge).")
     if a.pdf and a.no_render:
         fail("--pdf cannot be combined with --no-render (PDF export requires headless Chrome/Edge).")
     if a.script and a.no_render:
@@ -788,7 +805,7 @@ def main():
         fail("--vtt cannot be combined with --no-render (WebVTT export requires headless Chrome/Edge).")
 
     status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
-    if a.open and out.is_file():
+    if a.open and status == 0 and out.is_file():
         webbrowser.open(out.as_uri())
     if not a.watch:
         return status
