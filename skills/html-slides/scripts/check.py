@@ -100,9 +100,12 @@ def run(browser, args, timeout=120):
 def inspect(deck):
     """Render the deck and return the check report (dict). Raises CheckError when the check cannot run."""
     deck = pathlib.Path(deck).resolve()
-    if not deck.exists():
+    if not deck.is_file():
         raise CheckError("File not found: %s" % deck)
-    src = deck.read_text(encoding="utf-8")
+    try:
+        src = deck.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise CheckError("Could not read %s: %s" % (deck, e)) from e
     for marker in ("SLIDES:START", "SLIDES:END", "ENGINE JS"):
         if marker not in src:
             raise CheckError("This HTML was not built by this skill's build.py (marker '%s' is missing). Rebuild it from the source with build.py." % marker)
@@ -286,6 +289,9 @@ def main():
     ap.add_argument("--script", metavar="FILE", help="export the narration script as Markdown")
     ap.add_argument("--vtt", metavar="FILE", help="export timed captions as WebVTT (.vtt)")
     a = ap.parse_args()
+    if a.pdf_notes and not a.pdf:
+        print("ERROR: --pdf-notes requires --pdf FILE.")
+        return 2
     try:
         rep = inspect(a.deck)
     except CheckError as e:
