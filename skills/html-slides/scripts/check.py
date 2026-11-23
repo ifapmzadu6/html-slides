@@ -183,6 +183,14 @@ def export_pdf(rep, out_path, notes=False):
     return out
 
 
+def _write_atomic(out, text):
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=out.parent) as temp:
+        tmp = pathlib.Path(temp) / out.name
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(out)
+
+
 def export_script(rep, out_path):
     """Export the deck's narration script as Markdown."""
     out = pathlib.Path(out_path).resolve()
@@ -195,8 +203,7 @@ def export_script(rep, out_path):
             parts.append("- " + line)
         parts.append("")
     try:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text("\n".join(parts), encoding="utf-8")
+        _write_atomic(out, "\n".join(parts))
     except OSError as e:
         raise CheckError("Could not write script to %s: %s" % (out, e)) from e
     return out
@@ -217,7 +224,7 @@ def export_vtt(rep, out_path):
     idx = 0
     for item in rep.get("script") or []:
         for cue in item.get("cues") or []:
-            text = (cue.get("text") or "").strip()
+            text = re.sub(r"\s+", " ", cue.get("text") or "").strip()
             if not text:
                 continue
             idx += 1
@@ -226,8 +233,7 @@ def export_vtt(rep, out_path):
             parts.append(text.replace("-->", "->"))
             parts.append("")
     try:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text("\n".join(parts), encoding="utf-8")
+        _write_atomic(out, "\n".join(parts))
     except OSError as e:
         raise CheckError("Could not write WebVTT to %s: %s" % (out, e)) from e
     return out
