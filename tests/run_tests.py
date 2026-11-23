@@ -951,6 +951,31 @@ def main():
     with patch.object(sys, "argv", ["add_voice.py", str(tmp)]):
         ok("add_voice: rejects directory as deck path", add_voice.main() == 2)
 
+    # Batch 4 regression tests for check.py (#76-#88)
+    with patch.dict(os.environ, {"CHROME": str(tmp)}):
+        ok("check: find_browser ignores directory in CHROME env", check.find_browser() != str(tmp))
+    try:
+        check.export_pdf(rep, tmp)
+        ok("check: export_pdf rejects directory output", False)
+    except check.CheckError:
+        ok("check: export_pdf rejects directory output", True)
+    sc_nl = tmp / "script-nl.md"
+    check.export_script({"title": "Line1\nLine2", "deck": deck, "script": [{"label": "S1\nTitle", "sec": -5, "lines": ["A\nB"]}]}, sc_nl)
+    sc_nl_txt = sc_nl.read_text(encoding="utf-8")
+    ok("check: export_script collapses newlines and clamps negative sec",
+       sc_nl_txt.startswith("# Line1 Line2\n") and "## S1 Title (0:00)" in sc_nl_txt and "- A B" in sc_nl_txt)
+    vtt_edge = tmp / "edge.vtt"
+    check.export_vtt({"script": [{"cues": [{"start": 1000, "end": 500, "text": "a --> b"}, {"start": None, "end": None, "text": "ok"}]}]}, vtt_edge)
+    vtt_edge_txt = vtt_edge.read_text(encoding="utf-8")
+    ok("check: export_vtt guards None/reversed timestamps and escapes -->",
+       "00:00:01.000 --> 00:00:01.001" in vtt_edge_txt and "a -> b" in vtt_edge_txt and "00:00:00.000 --> 00:00:00.001" in vtt_edge_txt)
+    ok("check: print_issues handles unknown level and negative slide index safely",
+       check.print_issues([{"slide": -1, "type": "custom", "level": "info", "msg": "hi"}], lines=[10]) is False)
+    r_chk_col = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--vtt", str(deck)], capture_output=True, text=True)
+    ok("check.py: refuses --vtt overwriting input deck", r_chk_col.returncode == 2)
+    ext_ci_deck = built(tmp, "ext-ci.html", HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><IMG SRC="HTTPS://example.com/x.png" alt="x"></section>')
+    ok("check.inspect: catches uppercase HTTPS external URL", any(i["type"] == "external" for i in check.inspect(ext_ci_deck)["issues"]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:

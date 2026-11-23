@@ -148,7 +148,7 @@ One emoji as the main visual in place of a figure. Combine it with `tc`.
 
 ```html
 <section class="slide tc">
-  <p class="emoji-xl" data-anim="pop" data-say="困ったときは、">🙋</p>
+  <p class="emoji-xl" data-anim="pop" data-say="困ったときは、一人で抱え込まないでください。">🙋</p>
   <p class="big" data-say="人事部まで、気軽に相談してください。">困ったら<strong>人事部</strong>へ</p>
 </section>
 ```

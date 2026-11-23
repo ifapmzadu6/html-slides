@@ -14,9 +14,9 @@ It is written for [Claude Code](https://claude.com/claude-code) and other agents
 - **Navigation & review**: thumbnail slide overview (`G`, arrow keys), searchable / copyable transcript panel (`T`, `/` to filter), sentence seeking (`↑` / `↓`), replay sentence (`R`), direct slide jump (`1`–`99`), and keyboard shortcuts help (`?`).
 - **Fixed 16:9 stage** scaled to the window; keyboard, click, tap and swipe navigation.
 - **Phones**: captions move below the slide when the phone is held upright.
-- **Print & CLI export**: print to PDF one slide per page (or `?notes=1` with speaker notes), plus one-command `--pdf` / `--pdf-notes` and Markdown `--script` export from `build.py` / `check.py`.
+- **Print & CLI export**: print to PDF one slide per page (or `?notes=1` with speaker notes), plus one-command `--pdf` / `--pdf-notes`, Markdown `--script`, and WebVTT `--vtt` export from `build.py` / `check.py`.
 - **Ten themes**, plus a **dense mode** for information-heavy business documents: conclusion line, titled boxes, comparison tables with ○ / △ / ×, schedule (Gantt-style) tables, source notes, a footer with a confidentiality label and page numbers.
-- **Local images, single file**: write `<img src="photo.png" alt="…">` in the source and `build.py` automatically embeds local PNG/JPEG/WebP/GIF/SVG images as data URIs (with layouts for full-height figures, framed screenshots, text + image splits, photo cards, and full-bleed background photos).
+- **Local images, single file**: write `<img src="photo.png" alt="…">` in the source and `build.py` automatically embeds local PNG/JPEG/WebP/GIF/SVG/AVIF images as data URIs (with layouts for full-height figures, framed screenshots, text + image splits, photo cards, and full-bleed background photos).
 - **Nothing leaves the machine**: no external resources are loaded, only voices the browser reports as on-device are used, and the page opts out of automatic translation.
 
 ## Try it
@@ -87,7 +87,7 @@ python3 skills/html-slides/scripts/build.py deck.slides.html --shots deck-shots
 1. **Source lint** (no browser): unknown class, attribute or theme names with "did you mean" suggestions, unclosed tags, slides without narration, external URLs, text sized too small.
 2. **Rendered check** (headless browser): content outside the slide area or spilling out of its box, text rendered too small, captions that are too long, slides that run too long.
 
-`--shots` saves a PNG of every slide and two phone views. `--pdf` exports a 16:9 PDF (add `--pdf-notes` for speaker-notes handout pages), `--script` exports the narration script as Markdown, `--watch` rebuilds automatically on save, and `--extract` recovers the source from a built deck (which also lets an old deck be rebuilt with the current player).
+`--shots` saves a PNG of every slide and two phone views. `--pdf` exports a 16:9 PDF (add `--pdf-notes` for speaker-notes handout pages), `--script` exports the narration script as Markdown, `--vtt` exports timed captions as WebVTT, `--watch` rebuilds automatically on save, `--open` opens the built deck in a browser, and `--extract` recovers the source from a built deck (which also lets an old deck be rebuilt with the current player).
 
 | File | Role |
 |---|---|
@@ -142,7 +142,7 @@ On a machine with an NVIDIA GPU, install the matching CUDA builds of PyTorch and
 python3 tests/run_tests.py
 ```
 
-About 210 checks: the lint (including setting typo warnings), every example in the documentation, both sample decks in all ten themes, the source round trip, PDF and Markdown script export, a scripted interaction test in a headless browser (play, pause, sentence seeking, replay, digit jump, overview, transcript search, shortcuts help, replay), and narration tests against a fake speech engine that delivers its voice list late, drops notifications and fails.
+Over 270 checks: the lint (including setting typo warnings), every example in the documentation, both sample decks in all ten themes, the source round trip, PDF, Markdown script and WebVTT export, a scripted interaction test in a headless browser (play, pause, sentence seeking, replay, digit jump, overview, transcript search, shortcuts help, replay), and narration tests against a fake speech engine that delivers its voice list late, drops notifications and fails.
 
 The playback state machine is also specified in TLA+ ([`tests/tla/Player.tla`](tests/tla/Player.tla)) and model-checked with TLC. It verifies, among other things, that exactly one thing can advance playback at any time, that playback can always move on by a timer even if the speech engine never reports back, and that nothing changes while paused. Model checking found a real defect (an engine that never starts speaking kept being retried forever instead of falling back to captions), which is now covered by a browser test as well. To run it, point `TLA_JAR` at `tla2tools.jar`:
 
