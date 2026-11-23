@@ -382,6 +382,34 @@ def main():
     check.export_vtt(rep, vtt_file)
     vtt_text = vtt_file.read_text(encoding="utf-8")
     ok("vtt export: writes valid WebVTT with timestamps", vtt_text.startswith("WEBVTT\n\n1\n00:") and " --> " in vtt_text)
+
+    # --- local image embedding & layouts ---
+    img_dir = tmp / "img-deck"
+    img_dir.mkdir()
+    tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
+    (img_dir / "pic.png").write_bytes(tiny_png)
+    missing_src = HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><img src="nope.png" alt="missing"></section>'
+    ok("images: lint reports missing local image", any(i["type"] == "missing-image" for i in errors(build.lint(missing_src, base_dir=img_dir)[3])))
+    img_src = (
+        '<!--\ntitle: Images\ntheme: light\n-->\n'
+        '<section class="slide title"><img class="bg" data-bleed src="pic.png" alt=""><h1 data-say="Cover.">Cover</h1></section>\n'
+        '<section class="slide"><h2 data-say="Shot.">Shot</h2><figure class="grow"><img class="frame" src="pic.png" alt="s"><figcaption>Cap</figcaption></figure></section>\n'
+        '<section class="slide"><h2 data-say="Cols.">Cols</h2><div class="cols grow"><ul><li data-say="One.">One</li></ul><figure><img class="cover" src="pic.png" alt="c"></figure></div></section>\n'
+        '<section class="slide"><h2 data-say="Cards.">Cards</h2><div class="cols"><div class="card" data-say="A."><img src="pic.png" alt="a"><h3>A</h3><p>Desc</p></div></div></section>\n'
+    )
+    im_meta, im_css, im_slides, im_issues, _ = build.lint(img_src, base_dir=img_dir)
+    ok("images: lint is clean for all image layouts", not im_issues, im_issues)
+    im_html = img_dir / "img.html"
+    build.assemble(im_meta, im_css, im_slides, im_html, base_dir=img_dir, inline_images=True)
+    im_text = im_html.read_text(encoding="utf-8")
+    ok("images: local PNGs are embedded as data URIs", im_text.count("data:image/png;base64,") == 4 and 'src="pic.png"' not in im_text)
+    im_rep = check.inspect(im_html)
+    ok("images: rendered check is clean for all image layouts", not im_rep["issues"], im_rep["issues"])
+    im_ext = img_dir / "img-ext.html"
+    build.assemble(im_meta, im_css, im_slides, im_ext, base_dir=img_dir, inline_images=False)
+    ok("images: --no-inline-images keeps relative src", 'src="pic.png"' in im_ext.read_text(encoding="utf-8"))
+    broken_src = HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><img src="data:image/png;base64,AAAA" alt="bad"></section>'
+    ok("images: rendered check catches broken images", any(i["type"] == "broken-image" for i in check.inspect(built(tmp, "broken-img.html", broken_src))["issues"]))
     for theme in build.THEMES:
         d = tmp / ("theme-%s.html" % theme)
         build.assemble(dict(meta, theme=theme), css, slides, d)

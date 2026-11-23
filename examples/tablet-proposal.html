@@ -245,10 +245,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.section .sub { font-size: 34px; }
 
 /* columns and cards */
-.slide .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 32px; align-items: stretch; }
+.slide .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 32px; align-items: stretch; min-height: 0; }
+.slide .cols > * { min-height: 0; }
 .slide .card { background: var(--card); border: var(--border-w) solid var(--line); border-radius: var(--radius); padding: 28px 30px; display: flex; flex-direction: column; gap: 12px; font-size: 28px; line-height: 1.45; box-shadow: var(--shadow); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1), border-color .3s, box-shadow .3s; }
 .slide .card.speaking { border-color: var(--accent); box-shadow: 0 0 0 6px var(--accent-soft); }
 .slide .card .emoji { font-size: 60px; line-height: normal; }
+.slide .card img { width: 100%; max-height: 240px; object-fit: cover; border-radius: min(10px, var(--radius)); }
 .slide .emoji-xl { font-size: 130px; line-height: 1.1; }
 
 /* big number */
@@ -275,9 +277,22 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide tbody tr > * { transition: background-color .25s ease; }
 .slide tbody tr:nth-child(even) > * { background-color: color-mix(in srgb, var(--card) 55%, transparent); }
 .slide tbody tr.speaking > * { background-color: var(--accent-soft) !important; }
-.slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
-.slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; border-radius: 14px; }
-.slide figcaption { font-size: 24px; color: var(--muted); }
+.slide img { display: block; max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; border-radius: min(14px, var(--radius)); }
+.slide img.frame { border: var(--border-w) solid var(--line); box-shadow: var(--shadow); background: var(--bg); }
+.slide img.cover { width: 100%; height: 100%; object-fit: cover; }
+.slide img.bg { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; border-radius: 0; z-index: 0; pointer-events: none; }
+.slide:has(> img.bg) > :not(img.bg) { position: relative; z-index: 2; }
+.slide:has(> img.bg)::before { content: ""; position: absolute; inset: 0; width: auto; height: auto; right: 0; top: 0; border-radius: 0; background: linear-gradient(135deg, rgba(8,12,22,.76), rgba(8,12,22,.46)); opacity: 1; z-index: 1; display: block; pointer-events: none; }
+.slide:has(> img.bg)::after { display: none; }
+.slide:has(> img.bg) { color: #fff; }
+.slide:has(> img.bg) .sub, .slide:has(> img.bg) .note, .slide:has(> img.bg) .slide-footer { color: rgba(255,255,255,.85); }
+.slide:has(> img.bg) .kicker { color: var(--accent-2); }
+.slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; overflow: hidden; }
+.slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; flex: 0 1 auto; object-fit: contain; border-radius: min(14px, var(--radius)); }
+.slide figure.grow img { flex: 1 1 0; width: auto; max-width: 100%; }
+.slide figure.grow img.cover { width: 100%; }
+.slide figure.grow svg { flex: 1 1 0; width: 100%; }
+.slide figcaption { flex: none; font-size: 24px; color: var(--muted); }
 .slide pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; background: #0f172a; color: #e2e8f0; padding: 24px 28px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, .25); box-shadow: 0 4px 16px rgba(0, 0, 0, .14); overflow: hidden; white-space: pre-wrap; }
 .slide code { font-family: var(--mono); }
 .slide :not(pre) > code { font-size: .9em; padding: .06em .32em; border-radius: .26em; background: var(--accent-soft); }
@@ -339,6 +354,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:where(.dense) .cols.arrows > * + *::after { left: -32px; margin-top: -12px; border-width: 12px; border-left-width: 17px; }
 .slide:where(.dense) .card { padding: 14px 16px; font-size: 20px; gap: 6px; border-radius: min(14px, var(--radius)); }
 .slide:where(.dense) .card .emoji { font-size: 36px; }
+.slide:where(.dense) .card img { max-height: 150px; }
 .slide:where(.dense) .box { font-size: 20px; }
 .slide:where(.dense) .box > h3 { font-size: 20px; padding: 5px 14px; }
 .slide:where(.dense) .box > h3 ~ * { margin: 9px 14px 11px; }
@@ -1482,6 +1498,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         var fs = parseFloat(getComputedStyle(el).fontSize);
         if (el.ownerSVGElement && el.getScreenCTM) { var m = el.getScreenCTM(); if (m) fs = fs * Math.sqrt(m.a * m.a + m.b * m.b) / sc; } // for SVG text, account for the viewBox scale
         if (hasText && fs < minFont - 0.5) add(i, 'small-text', desc(el) + ' renders at ' + Math.round(fs) + 'px (the minimum is ' + (dense ? '14px on dense slides' : '22px') + ')');
+      });
+      $$('img', s).forEach(function (im) {
+        if (!im.complete || !im.naturalWidth) add(i, 'broken-image', desc(im) + ' could not be loaded (check the file path or image format)');
       });
       var T = timeline[i];
       if (!T.length) add(i, 'no-narration', 'This slide has nothing to narrate');

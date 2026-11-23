@@ -164,15 +164,44 @@ One emoji as the main visual in place of a figure. Combine it with `tc`.
 
 ## Figures and images
 
-`grow` on a `figure` makes it fill the remaining height. Never use an external URL: use inline SVG, a data URI, or a relative path to a file in the same folder. Always write `alt`.
+Write `<img src="screen.png" alt="…">` using a path relative to the `.slides.html` file (or a data URI). `build.py` automatically embeds local PNG, JPEG, WebP, GIF, SVG and AVIF files as data URIs so the output stays a single self-contained HTML file (pass `--no-inline-images` to keep external links instead). Never use an external `http(s)://` URL. Always write `alt`.
+
+`grow` on a `figure` makes it fill the remaining height. Add `class="frame"` to give a screenshot a subtle border and shadow.
 
 ```html
 <section class="slide">
   <h2 data-say="画面はこのようになっています。">申請画面</h2>
   <figure class="grow" data-anim="zoom" data-say="上に金額、下に目的を入力する、シンプルな画面です。">
-    <img src="screen.png" alt="申請画面。上に金額欄、下に目的欄がある">
+    <img class="frame" src="screen.png" alt="申請画面。上に金額欄、下に目的欄がある">
     <figcaption>申請画面</figcaption>
   </figure>
+</section>
+```
+
+For text and an image side by side, put bullets and a `<figure>` inside `<div class="cols grow">`. Add `class="cover"` to crop a photo cleanly to fill its column, or place an `<img>` at the top of a `.card`.
+
+```html
+<section class="slide">
+  <h2 data-say="アプリなら、撮るだけで申請が終わります。">アプリで完結</h2>
+  <div class="cols grow">
+    <ul>
+      <li data-say="領収書をカメラで撮影します。">領収書を撮影</li>
+      <li data-say="金額は自動で読み取られます。">金額を自動読み取り</li>
+    </ul>
+    <figure data-anim="zoom" data-say="確認ボタンを押せば申請完了です。">
+      <img class="frame" src="app.png" alt="スマホアプリの撮影画面">
+    </figure>
+  </div>
+</section>
+```
+
+For a full-bleed background photo on a cover, section or closing slide, put `<img class="bg" data-bleed src="hero.jpg" alt="">` inside the `<section>`. A dark scrim and white text are applied automatically.
+
+```html
+<section class="slide title">
+  <img class="bg" data-bleed src="hero.jpg" alt="">
+  <p class="kicker">2026年度 新人研修</p>
+  <h1 data-say="この動画では、経費精算のやり方を三分で説明します。">経費精算のやり方</h1>
 </section>
 ```
 
