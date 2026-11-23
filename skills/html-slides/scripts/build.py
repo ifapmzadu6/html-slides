@@ -7,8 +7,10 @@ Usage:
   python3 build.py deck.slides.html --pdf deck.pdf     # also export as PDF (add --pdf-notes for speaker notes)
   python3 build.py deck.slides.html --script deck.md   # also export the narration script as Markdown
   python3 build.py deck.slides.html --vtt deck.vtt     # also export timed captions as WebVTT (.vtt)
+  python3 build.py deck.slides.html --watch --open     # rebuild on save and open in the browser
   python3 build.py deck.slides.html -o out/deck.html   # choose the output path
   python3 build.py deck.slides.html --no-render        # lint and assemble only (no browser needed)
+  python3 build.py deck.slides.html --no-inline-images # keep local <img src> links external
   python3 build.py --extract deck.html                 # recover the source (deck.slides.html) from a built deck
 
 Two checks run:
@@ -133,12 +135,14 @@ def read_source(path):
         return path.read_text(encoding="utf-8-sig")  # tolerate a leading BOM
     except UnicodeDecodeError:
         fail("%s is not valid UTF-8. Save the file as UTF-8 and run again." % path)
+    except OSError as e:
+        fail("Could not read %s: %s" % (path, e))
 
 
 def _local_image_path(src_val, base_dir):
     """Resolve a local <img src> path against base_dir, or return None for URLs / data URIs."""
     s = (src_val or "").strip()
-    if not s or re.match(r"^(data:|blob:|https?:|file:|//|#)", s, re.I):
+    if not s or re.match(r"^(//|#)", s) or (re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", s) and not re.match(r"^[a-zA-Z]:[\\/]", s)):
         return None
     raw = s.split("#", 1)[0].split("?", 1)[0]
     p = pathlib.Path(raw)
@@ -175,6 +179,8 @@ class _ImgLocator(HTMLParser):
         if tag != "img":
             return
         line, col = self.getpos()
+        if line < 1 or line > len(self.line_offsets):
+            return
         start = self.line_offsets[line - 1] + col
         raw = self.get_starttag_text() or ""
         if raw:
@@ -237,7 +243,7 @@ def _watch_sig(src):
         st = src.stat()
         sigs.append((str(src), st.st_mtime_ns, st.st_size))
         text = src.read_text(encoding="utf-8-sig")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return tuple(sigs)
     loc = _ImgLocator(text)
     loc.feed(text)
@@ -331,16 +337,20 @@ class Lint(HTMLParser):
             self.add("warn", "anim-without-say", "data-anim is set but there is no data-say, so nothing animates.",
                      'Add data-say="narration sentence" to the same element, or remove data-anim.')
         if "data-caption" in a:
-            if not (a.get("data-say") or "").strip():
+            if "voice" not in cls and not (a.get("data-say") or "").strip():
                 self.add("error", "caption-without-say", "data-caption is set but data-say (the narration) is missing.",
                          'Add data-say="narration written the way it should be read" to the same element. If the caption and the reading are the same, remove data-caption and keep only data-say.')
-            elif len(sentences(a["data-say"])) != len(sentences(a["data-caption"] or "")):
+            elif (a.get("data-say") or "").strip() and len(sentences(a["data-say"])) != len(sentences(a["data-caption"] or "")):
                 self.add("error", "caption-mismatch", "data-say has %d sentence(s) but data-caption has %d, so captions cannot be paired sentence by sentence."
                          % (len(sentences(a["data-say"])), len(sentences(a["data-caption"] or ""))),
                          "Write data-say and data-caption with the same number of sentences in the same order (the same number of 。 marks).")
         if self.in_slide() and tag != "section" and ("data-say" in a or "voice" in cls):
-            self.slides[-1]["cues"] += 1
             say_val = (a.get("data-say") or "").strip()
+            if tag == "img" and not say_val:
+                self.add("warn", "empty-say", '<img> has an empty data-say attribute (an image has no visible text to read).',
+                         'Write the narration sentence in data-say="...", or put data-say on the enclosing <figure>.')
+            else:
+                self.slides[-1]["cues"] += 1
             sents = sentences(say_val) if say_val else []
             if sents and "…" not in say_val:
                 c0 = re.sub(r"[、。！？!?.・,\s]", "", sents[0])
@@ -351,19 +361,30 @@ class Lint(HTMLParser):
             if sym_m:
                 self.add("warn", "say-symbol", 'data-say contains a symbol ("%s") that speech engines may skip or misread.' % sym_m.group(0),
                          "Spell out symbols in data-say (for example, 二重丸, 丸, 三角, バツ) and keep ◎ / ○ / △ / × in data-caption.")
-        m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", a.get("style") or "")
+        style_val = a.get("style") or ""
+        if style_val and re.search(r"url\(\s*[\"']?(https?:)?//", style_val, re.I):
+            self.add("error", "external", "<%s> loads an external URL in its style attribute." % tag, NO_EXTERNAL)
+        m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", style_val, re.I)
         floor = 14 if (self.deck_dense or (self.slides and "dense" in self.slides[-1]["cls"])) else 22
         if m and float(m.group(1)) < floor and not any(e["tag"] == "svg" for e in self.stack) and tag != "svg":
             self.add("error", "small-text", "font-size: %spx is too small (minimum %dpx)." % (m.group(1), floor), check.HINTS["small-text"])
         for k in ("src", "href", "xlink:href"):
-            if tag in EXTERNAL_TAGS and re.match(r"\s*(https?:)?//", a.get(k) or ""):
-                self.add("error", "external", "<%s> loads an external URL (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
-        if tag == "img" and self.base_dir is not None:
+            val = (a.get(k) or "").strip()
+            if tag in EXTERNAL_TAGS and re.match(r"((https?|ftp|javascript|file):|//)", val, re.I):
+                if re.match(r"file:", val, re.I):
+                    self.add("error", "external", '<%s> uses a file:// URL ("%s"), which breaks on other machines.' % (tag, val),
+                             "Use a path relative to the .slides.html file (for example images/photo.png) so build.py can embed it.")
+                else:
+                    self.add("error", "external", "<%s> loads an external URL (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
+        if tag == "img" and self.in_slide():
             img_src = (a.get("src") or "").strip()
-            if re.match(r"^file:", img_src, re.I):
-                self.add("error", "external", '<img> uses a file:// URL ("%s"), which breaks on other machines.' % img_src,
-                         "Use a path relative to the .slides.html file (for example images/photo.png) so build.py can embed it.")
-            else:
+            if not img_src:
+                self.add("error", "missing-image", "<img> has no src attribute.",
+                         'Add src="path/to/image.png" relative to the .slides.html file.')
+            if "alt" not in a:
+                self.add("warn", "missing-alt", "<img> has no alt attribute.",
+                         'Add alt="short description" (or alt="" for a decorative/background image).')
+            if self.base_dir is not None and img_src and not re.match(r"file:", img_src, re.I):
                 img_path = _local_image_path(img_src, self.base_dir)
                 if img_path is not None:
                     if not img_path.is_file():
@@ -403,7 +424,8 @@ class Lint(HTMLParser):
         self.measure(e)
 
     def measure(self, e):
-        n = len(re.sub(r"\s+", "", e["text"]))
+        clean_t = re.sub(r"\s+", "", e["text"])
+        n = int(round(sum(1 if ord(ch) > 0x7F else 0.5 for ch in clean_t)))
         tag, cls = e["tag"], e["cls"]
         if self.deck_dense or (self.slides and "dense" in self.slides[-1]["cls"]):
             return  # dense slides have no item-count guideline; the rendered check catches real overflow
@@ -494,6 +516,7 @@ class SourceStyles(HTMLParser):
 def parse_source(text):
     """Return (settings, custom CSS, slide markup, problems with the settings)."""
     meta = {"title": "", "theme": "light", "lang": "ja", "density": "normal", "footer": None}
+    setting_lines = {}
     problems = []
     m = HEADER.match(text)
     if m and re.search(r"^\s*(title|theme|lang|density|footer)\s*:", m.group(1), re.M):
@@ -505,7 +528,10 @@ def parse_source(text):
                 val = v.strip()
                 if key in ("lang", "density") and not val:
                     continue
+                if key in ("theme", "density"):
+                    val = val.lower()
                 meta[key] = val
+                setting_lines[key] = offset
             elif sep and re.fullmatch(r"[a-z][a-z0-9_-]*", key):
                 problems.append({"line": offset, "slide": 0, "type": "unknown-setting", "level": "warn",
                                  "msg": 'Setting "%s" is not recognised (it has no effect).' % k.strip(),
@@ -519,14 +545,16 @@ def parse_source(text):
         problems.append({"line": 1, "slide": 0, "type": "no-title-setting", "level": "error", "msg": "The settings comment has no title.",
                          "hint": 'Add a line "title: the deck title".'})
     if meta["density"] not in ("normal", "dense"):
-        problems.append({"line": 1, "slide": 0, "type": "unknown-density", "level": "error", "msg": 'density "%s" does not exist.' % meta["density"],
+        problems.append({"line": setting_lines.get("density", 1), "slide": 0, "type": "unknown-density", "level": "error", "msg": 'density "%s" does not exist.' % meta["density"],
                          "hint": "Use density: dense (information-dense business documents), or delete the line (standard)."})
     if meta["theme"] not in THEMES:
-        problems.append({"line": 1, "slide": 0, "type": "unknown-theme", "level": "error", "msg": 'Theme "%s" does not exist.' % meta["theme"],
+        problems.append({"line": setting_lines.get("theme", 1), "slide": 0, "type": "unknown-theme", "level": "error", "msg": 'Theme "%s" does not exist.' % meta["theme"],
                          "hint": near(meta["theme"], THEMES) + "Available themes: " + ", ".join(THEMES) + "."})
     css, slides = SourceStyles(body).split()
     if css and re.search(r"url\(\s*[\"']?(https?:)?//|@import\b", css, re.I):
-        problems.append({"line": 1, "slide": 0, "type": "external", "level": "error",
+        style_pos = text.lower().find("<style")
+        style_ln = text[:style_pos].count("\n") + 1 if style_pos >= 0 else 1
+        problems.append({"line": style_ln, "slide": 0, "type": "external", "level": "error",
                          "msg": "<style> loads an external URL or @import (it will not show when the deck is opened offline).",
                          "hint": NO_EXTERNAL})
     for bad in ("SLIDES:START", "SLIDES:END", "ENGINE JS"):
@@ -594,10 +622,14 @@ def assemble(meta, css, slides, out_path, *, base_dir=None, inline_images=True):
     if k != 1:
         fail("The template is damaged: " + str(TEMPLATE))
     if css:
-        t = t.replace("</head>", '<style id="custom">\n%s\n</style>\n</head>' % css, 1)
+        safe_css = re.sub(r"</style", "<\\/style", css, flags=re.I)
+        t = t.replace("</head>", '<style id="custom">\n%s\n</style>\n</head>' % safe_css, 1)
     with deck_lock(out_path):
         if out_path.exists():
-            vm = VOICE_BLOCK.search(out_path.read_text(encoding="utf-8"))
+            try:
+                vm = VOICE_BLOCK.search(out_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
+                vm = None
             if vm and ENGINE_MARKER in t:
                 t = t.replace(ENGINE_MARKER, vm.group(0) + ENGINE_MARKER, 1)
         with staged_html(out_path, t) as staged:
@@ -641,19 +673,22 @@ def extract(deck_path, out_path, *, overwrite=True):
     head = DeckHead()
     head.feed(t[:m.start()])
     head.close()
-    title = head.title.strip()
+    def clean_hdr(v):
+        return re.sub(r"\s+", " ", (v or "").replace("-->", "-- >")).strip()
+
+    title = clean_hdr(head.title)
     if not title:
         fail("The deck has no document title: " + str(deck_path))
-    settings = ["title: " + title, "theme: " + (head.attrs.get("data-theme") or "light")]
-    lang = head.attrs.get("lang")
+    settings = ["title: " + title, "theme: " + clean_hdr(head.attrs.get("data-theme") or "light")]
+    lang = clean_hdr(head.attrs.get("lang") or "")
     if lang and lang != "ja":
         settings.append("lang: " + lang)
     if head.attrs.get("data-density") == "dense":
         settings.append("density: dense")
     if "data-footer" in head.attrs:
-        settings.append("footer: " + (head.attrs["data-footer"] or ""))
+        settings.append("footer: " + clean_hdr(head.attrs["data-footer"]))
     src = "<!--\n" + "\n".join(settings) + "\n-->\n"
-    cm = CUSTOM.search(t)
+    cm = CUSTOM.search(t[:m.start()])
     if cm:
         src += "<style>\n%s\n</style>\n" % cm.group(1).strip()
     with staged_html(out_path, src + "\n" + body + "\n") as staged, deck_lock(out_path):
@@ -754,7 +789,7 @@ def main():
     a = ap.parse_args()
 
     src = pathlib.Path(a.source).resolve()
-    if not src.exists():
+    if not src.is_file():
         fail("File not found: " + str(src))
     if a.out:
         out = pathlib.Path(a.out).resolve()
@@ -763,8 +798,15 @@ def main():
     else:
         name = src.name[:-len(".slides.html")] if src.name.endswith(".slides.html") else src.stem + ".out"
         out = src.with_name(name + ".html")
+    if out.is_dir():
+        fail("The output path is a directory: " + str(out))
     if out.exists() and out.samefile(src):
         fail("The output path is the same as the source. Pass -o with a different name.")
+    for flag, val in (("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
+        if val:
+            ep = pathlib.Path(val).resolve()
+            if ep == src or ep == out:
+                fail("%s output path cannot be the same as the source or built HTML." % flag)
 
     if a.extract:
         if a.watch:
@@ -805,8 +847,10 @@ def main():
         fail("--vtt cannot be combined with --no-render (WebVTT export requires headless Chrome/Edge).")
 
     status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
+    opened = False
     if a.open and status == 0 and out.is_file():
         webbrowser.open(out.as_uri())
+        opened = True
     if not a.watch:
         return status
     print("Watching %s for changes (Ctrl+C to stop)..." % src.name, flush=True)
@@ -819,7 +863,10 @@ def main():
                 last_sig = sig
                 print("\n--- Rebuilding %s ---" % src.name, flush=True)
                 try:
-                    build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
+                    rc = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
+                    if a.open and not opened and rc == 0 and out.is_file():
+                        webbrowser.open(out.as_uri())
+                        opened = True
                 except SystemExit as e:
                     if e.code:
                         print("(Rebuild error: exit %s)" % e.code, flush=True)

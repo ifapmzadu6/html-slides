@@ -881,6 +881,46 @@ def main():
         srv.shutdown()
         srv.server_close()
 
+    # Batch 2 regression tests for build.py (#26-#50)
+    m_ci, _, _, iss_ci, _ = build.lint("<!--\ntitle: Test\ntheme: Dark\ndensity: Dense\n-->\n<section class=\"slide title\"><h1 data-say=\"Hi.\">Hi</h1></section>\n")
+    ok("build: theme and density normalized case-insensitively", m_ci["theme"] == "dark" and m_ci["density"] == "dense" and not errors(iss_ci))
+
+    _, _, _, iss_ext_ci, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><img src=\"HTTPS://example.com/a.png\" alt=\"a\" data-say=\"a.\"></section>\n")
+    ok("build: uppercase HTTPS external URL rejected", any(i["type"] == "external" for i in errors(iss_ext_ci)))
+
+    _, _, _, iss_ftp, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><iframe src=\"javascript:alert(1)\"></iframe><h2 data-say=\"a.\">a</h2></section>\n")
+    ok("build: javascript: URL in iframe rejected", any(i["type"] == "external" for i in errors(iss_ftp)))
+
+    _, _, _, iss_style_url, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><div style=\"background:url(https://example.com/bg.png)\" data-say=\"a.\">a</div></section>\n")
+    ok("build: external url() in inline style rejected", any(i["type"] == "external" for i in errors(iss_style_url)))
+
+    _, _, _, iss_empty_img, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><img src=\"\" alt=\"a\" data-say=\"a.\"></section>\n")
+    ok("build: empty img src flagged as missing-image error", any(i["type"] == "missing-image" for i in errors(iss_empty_img)))
+
+    _, _, _, iss_no_alt, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><img src=\"data:image/png;base64,iVBORw0KGgo=\" data-say=\"a.\"></section>\n")
+    ok("build: img without alt warns missing-alt", any(i["type"] == "missing-alt" and i["level"] == "warn" for i in iss_no_alt))
+
+    _, _, _, iss_empty_alt, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><img src=\"data:image/png;base64,iVBORw0KGgo=\" alt=\"\" data-say=\"a.\"></section>\n")
+    ok("build: decorative img with alt='' does not warn missing-alt", not any(i["type"] == "missing-alt" for i in iss_empty_alt))
+
+    _, _, _, iss_empty_say_img, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><img src=\"data:image/png;base64,iVBORw0KGgo=\" alt=\"a\" data-say=\"   \"></section>\n")
+    ok("build: img with empty data-say warns empty-say", any(i["type"] == "empty-say" for i in iss_empty_say_img))
+
+    _, _, _, iss_voice_cap, _ = build.lint("<!--\ntitle: T\n-->\n<section class=\"slide\"><span class=\"voice\" data-caption=\"Narration only.\"></span></section>\n")
+    ok("build: .voice with data-caption only is allowed without no-narration error", not any(i["type"] in ("no-narration", "voice-empty") for i in iss_voice_cap))
+
+    _, _, _, iss_bad_theme_line, _ = build.lint("<!--\ntitle: T\ntheme: bogus\n-->\n<section class=\"slide\"><h2 data-say=\"a.\">a</h2></section>\n")
+    ok("build: unknown-theme reports exact header line number", any(i["type"] == "unknown-theme" and i.get("line") == 3 for i in iss_bad_theme_line))
+
+    css_esc_out = tmp / "css-escape.html"
+    build.assemble({"title": "A --> B\nLine2", "theme": "light", "lang": "en", "density": "normal"}, "body { content: '</style><script>alert(1)</script>'; }", COVER, css_esc_out)
+    css_esc_html = css_esc_out.read_text(encoding="utf-8")
+    ok("build: assemble escapes </style in custom CSS", "</style><script>alert(1)" not in css_esc_html and "<\\/style>" in css_esc_html)
+    ext_san_out = tmp / "extracted-san.slides.html"
+    build.extract(css_esc_out, ext_san_out)
+    ext_san_txt = ext_san_out.read_text(encoding="utf-8")
+    ok("build: extract sanitizes --> and newlines in header", "title: A -- > B Line2" in ext_san_txt)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
