@@ -425,6 +425,28 @@ def main():
     ok("images: img.bg works without data-bleed", not check.inspect(em_html)["issues"])
     file_url_src = HEAD + '<section class="slide title"><h1 data-say="Hi.">x</h1><img src="file:///tmp/pic.png" alt="f"></section>'
     ok("images: lint rejects file:// URLs", any(i["type"] == "external" for i in errors(build.lint(file_url_src, base_dir=img_dir)[3])))
+    (img_dir / "50%20.png").write_bytes(tiny_png)
+    (img_dir / "my pic.png").write_bytes(tiny_png)
+    attr_src = (
+        '<!--\ntitle: Attr\ntheme: light\nfooter: Confidential\n-->\n'
+        '<section class="slide title"><img class="bg" src="pic.png" alt=""><h1 data-say="Hi.">Hi</h1></section>\n'
+        '<section class="slide"><img class="bg" src="pic.png" alt=""><h2 data-say="Slide 2.">Slide 2</h2>'
+        '<img data-caption=\'Use src="pic.png" here\' data-say="Demo." src="50%20.png" alt="d">'
+        '<img src="my%20pic.png" alt="s"></section>\n'
+    )
+    am_meta, am_css, am_slides, am_issues, _ = build.lint(attr_src, base_dir=img_dir)
+    ok("images: attr-token & percent/space paths pass lint", not am_issues, am_issues)
+    am_html = img_dir / "attr.html"
+    build.assemble(am_meta, am_css, am_slides, am_html, base_dir=img_dir, inline_images=True)
+    am_text = am_html.read_text(encoding="utf-8")
+    ok("images: never rewrites src= inside another attribute value", 'data-caption=\'Use src="pic.png" here\'' in am_text and am_text.count("data:image/png;base64,") == 4)
+    ok("images: img.bg with footer passes rendered check", not check.inspect(am_html)["issues"])
+    watch_src = img_dir / "watch.slides.html"
+    watch_src.write_text(attr_src, encoding="utf-8")
+    sig1 = build._watch_sig(watch_src)
+    (img_dir / "pic.png").write_bytes(tiny_png + b"\x00")
+    sig2 = build._watch_sig(watch_src)
+    ok("images: --watch detects changes to referenced local images", sig1 != sig2)
     for theme in build.THEMES:
         d = tmp / ("theme-%s.html" % theme)
         build.assemble(dict(meta, theme=theme), css, slides, d)
