@@ -362,7 +362,7 @@ class Lint(HTMLParser):
                 self.add("warn", "say-symbol", 'data-say contains a symbol ("%s") that speech engines may skip or misread.' % sym_m.group(0),
                          "Spell out symbols in data-say (for example, 二重丸, 丸, 三角, バツ) and keep ◎ / ○ / △ / × in data-caption.")
         style_val = a.get("style") or ""
-        if style_val and re.search(r"url\(\s*[\"']?(https?:)?//", style_val, re.I):
+        if style_val and re.search(r"url\(\s*[\"']?((https?:)?//|file:)", style_val, re.I):
             self.add("error", "external", "<%s> loads an external URL in its style attribute." % tag, NO_EXTERNAL)
         m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", style_val, re.I)
         floor = 14 if (self.deck_dense or (self.slides and "dense" in self.slides[-1]["cls"])) else 22
@@ -395,7 +395,8 @@ class Lint(HTMLParser):
                         self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
                                  "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
         if tag not in VOID:
-            self.stack.append({"tag": tag, "line": line, "cls": cls, "kids": 0, "text": ""})
+            voice_cap = a.get("data-caption") if ("data-caption" in a and "voice" in cls and not (a.get("data-say") or "").strip()) else None
+            self.stack.append({"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap})
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
@@ -421,6 +422,13 @@ class Lint(HTMLParser):
         del self.stack[idx:]
         if self.stack:
             self.stack[-1]["text"] += e["text"]
+        if e.get("voice_cap") is not None and e["text"].strip():
+            say_n, cap_n = len(sentences(e["text"])), len(sentences(e["voice_cap"] or ""))
+            if say_n != cap_n:
+                self.add("error", "caption-mismatch",
+                         "voice text has %d sentence(s) but data-caption has %d, so captions cannot be paired sentence by sentence." % (say_n, cap_n),
+                         "Write the .voice text and data-caption with the same number of sentences in the same order (the same number of 。 marks).",
+                         line=e["line"])
         self.measure(e)
 
     def measure(self, e):

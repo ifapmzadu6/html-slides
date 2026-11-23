@@ -806,6 +806,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var cues = $$('[data-say], .voice', s).map(function (el) {
       var say = el.hasAttribute('data-say') && el.getAttribute('data-say').trim() ? el.getAttribute('data-say') : el.textContent;
       var cap = el.getAttribute('data-caption');
+      if (!clean(say) && cap && cap.trim()) say = cap;
       var parts;
       if (cap) {
         var sp = split(say), cp = split(cap);
@@ -944,7 +945,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       if (fired || my !== tok) { clearInterval(pollT); return; }
       if (began && synth.speaking === false) { if (++quiet >= 2) { clearInterval(pollT); ttsFails = 0; fin(); } } else quiet = 0;
     }, 400);
-    wd = setTimeout(fin, dur * 2.5 + 6000);
+    wd = setTimeout(fin, wdDur);
     keep = u; // keep a reference so garbage collection cannot drop onend
     try { synth.speak(u); } catch (e) { fail(); }
   }
