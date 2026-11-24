@@ -142,20 +142,25 @@ def read_source(path):
 def _local_image_path(src_val, base_dir):
     """Resolve a local <img src> path against base_dir, or return None for URLs / data URIs."""
     s = (src_val or "").strip()
-    if not s or re.match(r"^(//|#)", s) or (re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", s) and not re.match(r"^[a-zA-Z]:[\\/]", s)):
+    if not s or "\x00" in s or re.match(r"^(//|#)", s) or (re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", s) and not re.match(r"^[a-zA-Z]:[\\/]", s)):
         return None
     raw = s.split("#", 1)[0].split("?", 1)[0]
-    p = pathlib.Path(raw)
-    resolved = (p if p.is_absolute() else base_dir / p).resolve()
-    if resolved.is_file():
+    if not raw or "\x00" in raw:
+        return None
+    try:
+        p = pathlib.Path(raw)
+        resolved = (p if p.is_absolute() else base_dir / p).resolve()
+        if resolved.is_file():
+            return resolved
+        unquoted = urllib.parse.unquote(raw)
+        if unquoted != raw and "\x00" not in unquoted:
+            pu = pathlib.Path(unquoted)
+            resolved_u = (pu if pu.is_absolute() else base_dir / pu).resolve()
+            if resolved_u.is_file():
+                return resolved_u
         return resolved
-    unquoted = urllib.parse.unquote(raw)
-    if unquoted != raw:
-        pu = pathlib.Path(unquoted)
-        resolved_u = (pu if pu.is_absolute() else base_dir / pu).resolve()
-        if resolved_u.is_file():
-            return resolved_u
-    return resolved
+    except (OSError, ValueError):
+        return None
 
 
 def _image_mime(path):
@@ -339,6 +344,9 @@ class Lint(HTMLParser):
             if k.startswith("data-") and k not in DATA_ATTRS:
                 self.add("error", "unknown-attr", 'Attribute "%s" is not recognised (it has no effect).' % k,
                          near(k, DATA_ATTRS) + "Narration is data-say, the caption spelling is data-caption, the entrance animation is data-anim.")
+            elif k.startswith("on") and len(k) > 2 and k[2:].isalpha():
+                self.add("error", "script", 'Inline event handler "%s" is not allowed in the source.' % k,
+                         "Remove %s. The player supplies all behaviour; use data-say and data-anim only." % k)
         if "data-anim" in a and a["data-anim"] not in ANIMS:
             self.add("error", "unknown-anim", 'data-anim="%s" is not a valid animation.' % a["data-anim"],
                      near(a["data-anim"] or "", ANIMS) + "Valid values: " + ", ".join(ANIMS) + " (omit the attribute for the default rise-in).")
@@ -384,7 +392,7 @@ class Lint(HTMLParser):
         floor = 14 if self.is_dense_slide() else 22
         if m and float(m.group(1)) < floor and not any(e["tag"] == "svg" for e in self.stack) and tag != "svg":
             self.add("error", "small-text", "font-size: %spx is too small (minimum %dpx)." % (m.group(1), floor), check.HINTS["small-text"])
-        for k in ("src", "href", "xlink:href"):
+        for k in ("src", "href", "xlink:href", "poster", "data"):
             val = (a.get(k) or "").strip()
             if tag in EXTERNAL_TAGS and re.match(r"((https?|ftp|javascript|file):|//)", val, re.I):
                 if re.match(r"file:", val, re.I):
@@ -392,24 +400,43 @@ class Lint(HTMLParser):
                              "Use a path relative to the .slides.html file (for example images/photo.png) so build.py can embed it.")
                 else:
                     self.add("error", "external", "<%s> loads an external URL (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
+            elif k in ("href", "xlink:href") and re.match(r"javascript:", val, re.I):
+                self.add("error", "script", "<%s> uses a javascript: URL, which is not allowed." % tag,
+                         "Remove the javascript: URL. Use a normal link or plain text instead.")
+        srcset = (a.get("srcset") or "").strip()
+        if srcset and tag in EXTERNAL_TAGS:
+            for item in srcset.split(","):
+                u = item.strip().split()[0] if item.strip() else ""
+                if re.match(r"((https?|ftp|javascript|file):|//)", u, re.I):
+                    self.add("error", "external", "<%s> loads an external URL in srcset (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
+                    break
         if tag == "img" and self.in_slide():
             img_src = (a.get("src") or "").strip()
-            if not img_src:
-                self.add("error", "missing-image", "<img> has no src attribute.",
+            if not img_src or "\x00" in img_src:
+                self.add("error", "missing-image", "<img> has no valid src attribute.",
                          'Add src="path/to/image.png" relative to the .slides.html file.')
             if "alt" not in a:
                 self.add("warn", "missing-alt", "<img> has no alt attribute.",
                          'Add alt="short description" (or alt="" for a decorative/background image).')
-            if self.base_dir is not None and img_src and not re.match(r"file:", img_src, re.I):
+            if self.base_dir is not None and img_src and "\x00" not in img_src and not re.match(r"file:", img_src, re.I):
                 img_path = _local_image_path(img_src, self.base_dir)
                 if img_path is not None:
-                    if not img_path.is_file():
+                    try:
+                        is_f = img_path.is_file()
+                    except OSError:
+                        is_f = False
+                    if not is_f:
                         self.add("error", "missing-image", 'Image file not found: "%s" (looked for %s).' % (img_src, img_path),
                                  "Check the image path relative to the .slides.html file, or place the image in that folder.")
-                    elif self.inline_images and img_path.stat().st_size > LARGE_IMAGE_BYTES:
-                        mb = img_path.stat().st_size / (1024 * 1024)
-                        self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
-                                 "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
+                    elif self.inline_images:
+                        try:
+                            size = img_path.stat().st_size
+                        except OSError:
+                            size = 0
+                        if size > LARGE_IMAGE_BYTES:
+                            mb = size / (1024 * 1024)
+                            self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
+                                     "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
         if tag in ("td", "th") and self.stack:
             row = next((e for e in reversed(self.stack) if e["tag"] == "tr"), None)
             if row is not None:
