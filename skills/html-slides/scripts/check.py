@@ -261,7 +261,7 @@ def export_vtt(rep, out_path):
             idx += 1
             parts.append(str(idx))
             parts.append("%s --> %s" % (_vtt_time(start_ms), _vtt_time(end_ms)))
-            parts.append(text.replace("-->", "->"))
+            parts.append(text.replace("&", "&amp;").replace("<", "&lt;").replace("-->", "->"))
             parts.append("")
     try:
         _write_atomic(out, "\n".join(parts))

@@ -10,6 +10,7 @@ Usage:
   python3 add_voice.py deck.html --engine kokoro --speaker jf_alpha  # use local Kokoro-82M
   python3 add_voice.py deck.html --engine qwen3 --speaker Ono_Anna   # use local Qwen3-TTS (Windows or Apple Silicon)
   python3 add_voice.py deck.html --engine say    # use the built-in macOS voice (low quality)
+  python3 add_voice.py deck.html --info          # inspect embedded audio details (no engine needed)
   python3 add_voice.py deck.html --remove        # remove the embedded audio
 
 Speech engines (all run on this computer):
@@ -404,8 +405,8 @@ def _prep_qwen3_text(s, lang="japanese"):
         # Only quantities with explicit units should acquire 万 or 億.
         s = re.sub(r"(?<![A-Za-z_\d.．])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
                    _ja_num_units, s)
-        # Convert 1-4 digit numbers before 円, 万円, 億円 (e.g. 3000円 -> 三千円, 4800万円 -> 四千八百万円) to explicit place-value kanji.
-        s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{0,3})(?=(?:万|億)?円)",
+        # Convert 1-4 digit numbers before 円, 万円, 億円, or 億...万円 (e.g. 3000円 -> 三千円, 1億2000万円 -> 一億二千万円) to explicit place-value kanji.
+        s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{0,3})(?=(?:億(?:[0-9０-９一二三四五六七八九十百千]+万)?|万)?円)",
                    lambda m: _ja_currency_group(int(m.group(1))), s)
         # Preserve the existing kanji decimal notation (e.g. 六・八万円).
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
@@ -444,7 +445,7 @@ def _prep_qwen3_text(s, lang="japanese"):
             s = re.sub(r"(?:^|(?<=[、。！？\sはがをにでともへ]))主な(?!の|で|ら)", "おもな", s)
     for k, v in QWEN3_SYMBOL_FIXES:
         s = s.replace(k, v)
-    if s and s[-1] not in "。！？!?.":
+    if s and not re.search(r"[。！？!?.][」』）)\"']*$", s):
         s += "。"
     return s
 
@@ -793,6 +794,7 @@ def main():
     ap.add_argument("--speed", type=float, default=1.0)
     action = ap.add_mutually_exclusive_group()
     action.add_argument("--list", action="store_true")
+    action.add_argument("--info", action="store_true", help="show details about embedded audio in the deck")
     action.add_argument("--remove", action="store_true")
     action.add_argument("--trim-clip", nargs=2, metavar=("SENTENCE", "END_SECONDS"),
                         help="keep the start of an embedded sentence clip up to END_SECONDS")
@@ -832,6 +834,28 @@ def main():
                 old = parsed if isinstance(parsed, dict) else {}
             except ValueError:
                 old = {}
+    if a.info:
+        clips = old.get("clips") if isinstance(old.get("clips"), dict) else {}
+        if not clips:
+            print("No embedded audio in %s." % deck.name)
+            return 0
+        durs = old.get("durations") if isinstance(old.get("durations"), dict) else {}
+        formats = {}
+        total_b64 = 0
+        for uri in clips.values():
+            if isinstance(uri, str):
+                total_b64 += len(uri)
+                hdr = uri.partition(";")[0]
+                hdr = (hdr[5:] if hdr.startswith("data:") else hdr) or "unknown"
+                formats[hdr] = formats.get(hdr, 0) + 1
+        fmt_str = ", ".join("%s (%d)" % (k, v) for k, v in sorted(formats.items()))
+        print("Deck: %s (%.2f MB total, ~%.2f MB audio data)" % (deck.name, deck.stat().st_size / 1e6, total_b64 / 1e6))
+        print("Voice: %s (%s), speed: %s" % (old.get("label") or "unknown", old.get("voice") or "unknown", old.get("speed", "unknown")))
+        print("Clips: %d [%s]" % (len(clips), fmt_str))
+        if durs:
+            tot_sec = sum(v for v in durs.values() if isinstance(v, (int, float)) and math.isfinite(v) and v > 0)
+            print("Duration: %.1f s across %d timed clip(s)" % (tot_sec, len(durs)))
+        return 0
     if a.remove:
         try:
             if m:
