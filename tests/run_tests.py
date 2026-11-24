@@ -1221,6 +1221,33 @@ def main():
     ok("player: lifted footer stays below .source on dense slides and #blank receives focus",
        lift_o.get("fTop", 0) >= lift_o.get("srcBot", 999) and lift_o.get("blankFocused") is True, lift_o)
 
+    # Batch 13 regression tests (HTMLParser external check, SVG <image> inlining, self-closing non-void HTML, CLI JSON/collisions)
+    ok("check: ignores url(https://...) inside slide <code> and HTML comments",
+       not check.has_external_resources('<pre><code>background: url(https://example.com/a.png);</code></pre><!-- <img src="https://evil.com/x.png"> -->'))
+    ok("check: ignores data:image/svg+xml with http:// XML namespace",
+       not check.has_external_resources('<img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22/>">'))
+    ok("check: catches unquoted external img src and inline style url()",
+       check.has_external_resources('<img src=https://evil.com/x.png alt=x>') and check.has_external_resources('<div style="background:url(https://evil.com/bg.png)"></div>'))
+    ok("check: catches external url() in <style> while ignoring CSS comments",
+       check.has_external_resources('<style>body{background:url(https://evil.com/a.png)}</style>') and not check.has_external_resources('<style>/* url(https://example.com/comment) */ body{color:#000}</style>'))
+    sc_iss = build.lint(HEAD + '<section class="slide title"><h1 data-say="Hi.">Hi</h1><div class="card" /><p>next</p></section>')[3]
+    ok("build: rejects non-void self-closing HTML tag outside SVG", any(i["type"] == "self-closing" for i in errors(sc_iss)), sc_iss)
+    ok("build: allows self-closing SVG shapes inside <svg>", not errors(build.lint(HEAD + '<section class="slide title"><h1 data-say="Hi.">Hi</h1><svg viewBox="0 0 100 100"><rect width="10" height="10"/></svg></section>')[3]))
+    svg_img_dir = tmp / "svgimg"
+    svg_img_dir.mkdir(exist_ok=True)
+    (svg_img_dir / "tiny.png").write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="))
+    svg_src = HEAD + '<section class="slide title"><h1 data-say="Hi.">Hi</h1><svg viewBox="0 0 100 100"><image href="tiny.png" width="50" height="50"/></svg></section>'
+    sm, sc_css, ssl, s_iss, _ = build.lint(svg_src, base_dir=svg_img_dir)
+    svg_out = svg_img_dir / "out.html"
+    build.assemble(sm, sc_css, ssl, svg_out, base_dir=svg_img_dir)
+    ok("build: embeds local SVG <image href> as data URI", not errors(s_iss) and "data:image/png;base64," in svg_out.read_text(encoding="utf-8"))
+    miss_svg = build.lint(HEAD + '<section class="slide title"><h1 data-say="Hi.">Hi</h1><svg viewBox="0 0 100 100"><image href="nope.png" width="50" height="50"/></svg></section>', base_dir=svg_img_dir)[3]
+    ok("build: catches missing local SVG <image href>", any(i["type"] == "missing-image" for i in errors(miss_svg)), miss_svg)
+    r_dup_b = subprocess.run([sys.executable, str(SKILL / "scripts" / "build.py"), str(starter), "--pdf", str(tmp / "same.out"), "--script", str(tmp / "same.out"), "--json"], capture_output=True, text=True)
+    ok("build.py --json: rejects duplicate export target with valid JSON", r_dup_b.returncode == 2 and json.loads(r_dup_b.stdout).get("ok") is False, r_dup_b.stdout)
+    r_dup_c = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--pdf", str(tmp / "same.out"), "--vtt", str(tmp / "same.out"), "--json"], capture_output=True, text=True)
+    ok("check.py --json: rejects duplicate export target with valid JSON", r_dup_c.returncode == 2 and "error" in json.loads(r_dup_c.stdout), r_dup_c.stdout)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
