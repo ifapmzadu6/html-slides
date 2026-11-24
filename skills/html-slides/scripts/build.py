@@ -410,9 +410,30 @@ class Lint(HTMLParser):
                         mb = img_path.stat().st_size / (1024 * 1024)
                         self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
                                  "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
+        if tag in ("td", "th") and self.stack:
+            row = next((e for e in reversed(self.stack) if e["tag"] == "tr"), None)
+            if row is not None:
+                cs_raw = a.get("colspan")
+                if cs_raw is not None:
+                    try:
+                        cs = int(cs_raw)
+                        if cs <= 0:
+                            raise ValueError
+                    except ValueError:
+                        self.add("error", "bad-colspan", 'Invalid colspan="%s" (must be a positive integer).' % cs_raw,
+                                 'Use a positive integer such as colspan="2".')
+                        cs = 1
+                else:
+                    cs = 1
+                row["cells"] = row.get("cells", 0) + cs
         if tag not in VOID:
             voice_cap = a.get("data-caption") if ("data-caption" in a and "voice" in cls and not (a.get("data-say") or "").strip()) else None
-            self.stack.append({"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap})
+            entry = {"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap}
+            if tag == "table" and "gantt" in cls:
+                entry["gantt_head"] = None
+            elif tag == "tr":
+                entry["cells"] = 0
+            self.stack.append(entry)
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
@@ -438,6 +459,17 @@ class Lint(HTMLParser):
         del self.stack[idx:]
         if self.stack:
             self.stack[-1]["text"] += e["text"]
+            if e["tag"] == "tr":
+                tbl = next((x for x in reversed(self.stack) if x["tag"] == "table"), None)
+                if tbl is not None and "gantt" in tbl["cls"]:
+                    in_head = any(x["tag"] == "thead" for x in self.stack[self.stack.index(tbl) + 1:])
+                    if in_head and tbl.get("gantt_head") is None and e.get("cells", 0) > 0:
+                        tbl["gantt_head"] = e["cells"]
+                    elif not in_head and tbl.get("gantt_head") and e.get("cells", 0) != tbl["gantt_head"]:
+                        self.add("error", "gantt-columns",
+                                 "Gantt row has %d column(s) (counting colspan) but header has %d." % (e.get("cells", 0), tbl["gantt_head"]),
+                                 "Make every row's cells (th + td colspans) add up to exactly %d columns." % tbl["gantt_head"],
+                                 line=e["line"])
         if e.get("voice_cap") is not None and e["text"].strip():
             say_n, cap_n = len(sentences(e["text"])), len(sentences(e["voice_cap"] or ""))
             if say_n != cap_n:
@@ -507,12 +539,14 @@ class SourceStyles(HTMLParser):
 
     def source_offset(self):
         line, column = self.getpos()
+        if line < 1 or line > len(self.line_offsets):
+            return len(self.body)
         return self.line_offsets[line - 1] + column
 
     def handle_starttag(self, tag, attrs):
         if tag == "style":
             self.start = self.source_offset()
-            self.content_start = self.start + len(self.get_starttag_text())
+            self.content_start = self.start + len(self.get_starttag_text() or "")
 
     def handle_endtag(self, tag):
         if tag == "style" and self.start is not None:
@@ -640,7 +674,7 @@ def assemble(meta, css, slides, out_path, *, base_dir=None, inline_images=True):
         slides = inline_local_images(slides, base_dir)
     t = TEMPLATE.read_text(encoding="utf-8")
     extra = ' translate="no"' + (' data-density="dense"' if meta.get("density") == "dense" else "") + (' data-footer="%s"' % html.escape(meta["footer"]) if meta.get("footer") is not None else "")
-    t = re.sub(r'<html lang="[^"]*" data-theme="[^"]*"[^>]*>', lambda _: '<html lang="%s" data-theme="%s"%s>' % (html.escape(meta["lang"]), meta["theme"], extra), t, count=1)
+    t = re.sub(r'<html lang="[^"]*" data-theme="[^"]*"[^>]*>', lambda _: '<html lang="%s" data-theme="%s"%s>' % (html.escape(meta["lang"]), html.escape(meta["theme"]), extra), t, count=1)
     t = re.sub(r"<title>.*?</title>", lambda _: "<title>%s</title>" % html.escape(meta["title"], quote=False), t, count=1, flags=re.S)
     t, k = REGION.subn(lambda m: m.group(1) + "\n" + slides + "\n\n" + m.group(2), t, count=1)
     if k != 1:
@@ -710,7 +744,8 @@ def extract(deck_path, out_path, *, overwrite=True):
     if head.attrs.get("data-density") == "dense":
         settings.append("density: dense")
     if "data-footer" in head.attrs:
-        settings.append("footer: " + clean_hdr(head.attrs["data-footer"]))
+        fv = clean_hdr(head.attrs["data-footer"])
+        settings.append("footer:" + (" " + fv if fv else ""))
     src = "<!--\n" + "\n".join(settings) + "\n-->\n"
     cm = CUSTOM.search(t[:m.start()])
     if cm:
@@ -884,6 +919,13 @@ def main():
             time.sleep(0.5)
             sig = _watch_sig(src)
             if sig and sig != last_sig:
+                # Debounce atomic/truncate editor saves: wait until size > 0 and signature stabilizes.
+                if sig[0][2] == 0:
+                    continue
+                time.sleep(0.12)
+                sig2 = _watch_sig(src)
+                if not sig2 or sig2 != sig:
+                    continue
                 last_sig = sig
                 print("\n--- Rebuilding %s ---" % src.name, flush=True)
                 try:

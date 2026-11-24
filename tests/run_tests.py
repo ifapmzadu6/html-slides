@@ -184,6 +184,9 @@ SELFTEST_JS = r"""
     ok('?: shortcuts help opens and playback pauses', !$('#help').hidden && !playing());
     key('Escape'); await sleep(300);
     ok('Esc: shortcuts help closes and playback resumes', $('#help').hidden && playing());
+    $('#b-help').click();
+    ok('help button: opens shortcuts help and pauses', !$('#help').hidden && !playing());
+    key('Escape'); await sleep(300);
 
     key('c'); ok('C: captions off', !$('#caption').classList.contains('show') && $('#b-cc').getAttribute('aria-pressed') === 'false');
     key('c'); await sleep(50); ok('C: captions on', ($('#caption').classList.contains('show') || cap() === '') && $('#b-cc').getAttribute('aria-pressed') === 'true');
@@ -195,6 +198,13 @@ SELFTEST_JS = r"""
     key(' ');
     key('g'); key('Escape'); await sleep(200);
     ok('overview opened and closed while stopped: stays stopped', !playing());
+    key('t');
+    const scLines = document.querySelectorAll('.sc-line');
+    const targetLine = scLines[scLines.length - 1];
+    const targetCap = targetLine.textContent;
+    targetLine.click(); await sleep(150);
+    ok('transcript line click while paused: jumps, highlights cue, and shows caption',
+       $('#script').hidden && !playing() && cur() === N && cap() === targetCap && document.querySelectorAll('#stage .slide.active .speaking').length === 1);
     key(' '); await sleep(100);
 
     key('End'); await sleep(70000);
@@ -1019,6 +1029,37 @@ def main():
     r_chk_json = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--json"], capture_output=True, text=True)
     parsed_chk = json.loads(r_chk_json.stdout) if r_chk_json.returncode == 0 else {}
     ok("check.py --json: outputs valid JSON report", r_chk_json.returncode == 0 and parsed_chk.get("slides") == rep["slides"] and isinstance(parsed_chk.get("issues"), list))
+
+    # Batch 6 regression tests (gantt lint, add_voice batch error handling, URL ?rate=&caps=0)
+    bad_gantt = (
+        '<!--\ntitle: G\ntheme: light\ndensity: dense\n-->\n'
+        '<section class="slide title"><h1 data-say="G.">G</h1></section>\n'
+        '<section class="slide"><h2 data-say="Plan.">Plan</h2>'
+        '<table class="gantt"><thead><tr><th>Task</th><th>M1</th><th>M2</th><th>M3</th></tr></thead>'
+        '<tbody><tr data-say="A."><th>A</th><td class="bar" colspan="2">A</td></tr></tbody></table></section>\n'
+    )
+    ok("build: lint catches gantt row column count mismatch",
+       any(i["type"] == "gantt-columns" for i in errors(build.lint(bad_gantt)[3])))
+    bad_colspan = bad_gantt.replace('colspan="2"', 'colspan="0"')
+    ok("build: lint catches invalid colspan=0",
+       any(i["type"] == "bad-colspan" for i in errors(build.lint(bad_colspan)[3])))
+    err_deck = tmp / "qwen3-err.html"
+    build.assemble(meta, "", COVER, err_deck)
+    err_before = err_deck.read_bytes()
+    with patch.object(add_voice.platform, "system", return_value="Darwin"), \
+         patch.object(sys, "argv", ["add_voice.py", str(err_deck), "--engine", "qwen3"]), \
+         patch.object(add_voice, "qwen3_available", return_value=True), \
+         patch.object(add_voice, "qwen3_batch_synth", side_effect=RuntimeError("simulated model load failure")):
+        rc_qerr = add_voice.main()
+    ok("add_voice: qwen3_batch_synth error exits 1 without modifying deck",
+       rc_qerr == 1 and err_deck.read_bytes() == err_before)
+    ok("add_voice: find_voicevox handles connection refused cleanly without shadowing error",
+       add_voice.find_voicevox("http://127.0.0.1:1") is None)
+    ok("add_voice: find_kokoro_api handles connection refused cleanly without shadowing error",
+       add_voice.find_kokoro_api("http://127.0.0.1:1") is None)
+    r_rc = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", deck.as_uri() + "?rate=1.5&caps=0"])
+    ok("player: URL ?rate=1.5&caps=0 sets initial speed and captions off",
+       '>1.5x</button>' in r_rc.stdout and 'id="b-cc"' in r_rc.stdout and 'aria-pressed="false"' in r_rc.stdout)
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:

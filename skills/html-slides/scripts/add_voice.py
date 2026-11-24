@@ -27,7 +27,7 @@ Speech engines (all run on this computer):
 import argparse
 import base64
 import html
-import http.client
+from http.client import HTTPException
 import importlib.util
 import io
 import json
@@ -122,7 +122,7 @@ def find_voicevox(url):
             ver = json.loads(http(u + "/version", timeout=2))
             if isinstance(ver, str) and ver.strip():
                 return u
-        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
+        except (urllib.error.URLError, HTTPException, OSError, ValueError):
             continue
     return None
 
@@ -158,7 +158,7 @@ def find_kokoro_api(url):
             data = json.loads(http(u + "/v1/audio/voices", timeout=2))
             if isinstance(data, dict) and isinstance(data.get("voices"), list):
                 return u
-        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
+        except (urllib.error.URLError, HTTPException, OSError, ValueError):
             continue
     return None
 
@@ -894,7 +894,7 @@ def main():
     if engine == "voicevox":
         try:
             speakers = voicevox_speakers(base)
-        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError) as e:
+        except (urllib.error.URLError, HTTPException, OSError, ValueError, KeyError) as e:
             print("ERROR: could not get the voice list from the speech engine (%s)." % e)
             return 2
         if not speakers:
@@ -918,7 +918,7 @@ def main():
     elif engine == "kokoro-api":
         try:
             speakers = kokoro_api_voices(kokoro_base)
-        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError) as e:
+        except (urllib.error.URLError, HTTPException, OSError, ValueError, KeyError) as e:
             print("ERROR: could not get the voice list from Kokoro (%s)." % e)
             return 2
         if not speakers:
@@ -1008,11 +1008,16 @@ def main():
     qwen3_cache = {}
     with tempfile.TemporaryDirectory() as tmp:
         tmp = pathlib.Path(tmp)
-        qwen3_pre = (
-            qwen3_batch_synth(todo, label, a.speed, a.model, qwen3_cache, tmp, a.instruct, a.temperature, all_texts=texts, lang=lang)
-            if engine == "qwen3" and not windows_qwen and todo
-            else {}
-        )
+        try:
+            qwen3_pre = (
+                qwen3_batch_synth(todo, label, a.speed, a.model, qwen3_cache, tmp, a.instruct, a.temperature, all_texts=texts, lang=lang)
+                if engine == "qwen3" and not windows_qwen and todo
+                else {}
+            )
+        except (ImportError, urllib.error.URLError, HTTPException, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
+            print("Audio could not be generated (%s)" % e)
+            print("The HTML was not changed.")
+            return 1
         for n, t in enumerate(todo, 1):
             try:
                 if engine == "voicevox":
@@ -1028,15 +1033,15 @@ def main():
                     raw, ext = qwen3_pre[t], ".wav"
                 else:
                     raw, ext = say_synth(t, label, a.speed, tmp)
-            except (ImportError, urllib.error.URLError, http.client.HTTPException, OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as e:
+                if ext == ".wav":
+                    dur = wav_duration(raw)
+                    if dur is not None:
+                        durations[t] = dur
+                data, mime = compress(raw, ext, tmp)
+            except (ImportError, urllib.error.URLError, HTTPException, OSError, subprocess.CalledProcessError, ValueError, RuntimeError, KeyError) as e:
                 print("Audio could not be generated: %s (%s)" % (t[:30], e))
                 print("The HTML was not changed.")
                 return 1
-            if ext == ".wav":
-                dur = wav_duration(raw)
-                if dur is not None:
-                    durations[t] = dur
-            data, mime = compress(raw, ext, tmp)
             clips[t] = "data:%s;base64,%s" % (mime, base64.b64encode(data).decode("ascii"))
             if n % 10 == 0:
                 print("  %d / %d" % (n, len(todo)))
