@@ -11,7 +11,7 @@ It is written for [Claude Code](https://claude.com/claude-code) and other agents
 - **Narration** with the viewer's on-device voice (Web Speech API), sentence by sentence, with captions.
 - **Reveal on cue**: an element carrying `data-say="…"` appears when its narration is spoken.
 - **Video-style controls**: play / pause, a duration-weighted progress bar with hover tooltips, elapsed / total clock, speed, sound, captions, full screen, hardware media keys (Media Session API), and Screen Wake Lock while playing.
-- **Navigation & review**: thumbnail slide overview (`G`, arrow keys), searchable / copyable transcript panel (`T`, `/` to filter), sentence seeking (`↑` / `↓`), replay sentence (`R`), direct slide jump (`1`–`99`), and keyboard shortcuts help (`?`).
+- **Navigation & review**: thumbnail slide overview (`G`, arrow keys), searchable / copyable transcript panel (`T`, `/` to filter), sentence seeking (`↑` / `↓`), replay sentence (`R`), direct slide jump (`1`–`99`), presenter blackout (`B`), and keyboard shortcuts help (`?`).
 - **Fixed 16:9 stage** scaled to the window; keyboard, click, tap and swipe navigation.
 - **Phones**: captions move below the slide when the phone is held upright.
 - **Print & CLI export**: print to PDF one slide per page (or `?notes=1` with speaker notes), plus one-command `--pdf` / `--pdf-notes`, Markdown `--script`, and WebVTT `--vtt` export from `build.py` / `check.py`.

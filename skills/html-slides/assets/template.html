@@ -218,6 +218,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide .big { font-size: 44px; line-height: 1.45; font-weight: 700; }
 .slide .note { font-size: 26px; color: var(--muted); }
 .slide strong { color: var(--accent); font-weight: 800; }
+.slide a { color: var(--accent); text-decoration: underline; text-underline-offset: .15em; text-decoration-thickness: max(2px, .07em); }
+.slide a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 .slide mark { color: inherit; background: linear-gradient(transparent 82%, var(--accent-2) 82%); background: linear-gradient(transparent 66%, color-mix(in srgb, var(--accent-2) 50%, transparent) 66%); padding: 0 .12em; border-radius: 2px; }
 .slide .badge { display: inline-block; align-self: flex-start; font-size: 24px; font-weight: 800; padding: 4px 18px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
 .slide.tc .badge, .slide.center .badge { align-self: center; }
@@ -244,8 +246,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.section .kicker, .slide.section .sub { color: var(--section-fg); opacity: .85; }
 .slide.section .sub { font-size: 34px; }
 .slide.section strong { color: var(--section-fg); text-decoration: underline; text-decoration-color: var(--accent-2); text-underline-offset: .15em; }
+.slide.section a { color: var(--section-fg); }
 .slide.section .badge { background: var(--section-fg); color: var(--section-bg); }
 .slide.section :not(pre) > code { background: rgba(255,255,255,.18); color: var(--section-fg); }
+.slide.section .card, .slide.section .box, .slide.section ol.flow > li, .slide.section .lead { color: var(--fg); }
+.slide.section .card strong, .slide.section .box strong, .slide.section .lead strong { color: var(--accent); text-decoration: none; }
+.slide.section .card a, .slide.section .box a, .slide.section .lead a { color: var(--accent); }
 
 /* columns and cards */
 .slide .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 32px; align-items: stretch; min-height: 0; }
@@ -290,11 +296,21 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:has(> img.bg)::after { display: none; }
 .slide:has(> img.bg) { color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
 .slide:has(> img.bg) .sub, .slide:has(> img.bg) .note, .slide:has(> img.bg) .slide-footer, .slide:has(> img.bg) figcaption { color: rgba(255,255,255,.85); }
-.slide:has(> img.bg) .kicker, .slide:has(> img.bg) strong { color: var(--accent-2); }
+.slide:has(> img.bg) .kicker, .slide:has(> img.bg) strong, .slide:has(> img.bg) a { color: var(--accent-2); }
+.slide:has(> img.bg) h2 { border-left-color: var(--accent-2); }
+.slide:has(> img.bg) ul > li::before { background: var(--accent-2); }
+.slide:has(> img.bg) ol > li::before { background: var(--accent-2); color: #111; }
+.slide:has(> img.bg) blockquote::before { color: var(--accent-2); opacity: .65; }
+.slide:has(> img.bg) table { background: rgba(10,15,28,.72); border-radius: min(14px, var(--radius)); overflow: hidden; text-shadow: none; }
+.slide:has(> img.bg) tbody tr:nth-child(even) > * { background-color: rgba(255,255,255,.08); }
+.slide:has(> img.bg) tbody tr.speaking > * { background-color: rgba(255,255,255,.22) !important; }
 .slide:has(> img.bg) .card, .slide:has(> img.bg) .box, .slide:has(> img.bg) ol.flow > li, .slide:has(> img.bg) .lead { color: var(--fg); text-shadow: none; }
+.slide:has(> img.bg) .card ul > li::before, .slide:has(> img.bg) .box ul > li::before { background: var(--accent); }
+.slide:has(> img.bg) .card ol > li::before, .slide:has(> img.bg) .box ol > li::before { background: var(--accent); color: var(--on-accent); }
 .slide:has(> img.bg) pre { text-shadow: none; }
 .slide:has(> img.bg) .card .note, .slide:has(> img.bg) .box .note { color: var(--muted); }
-.slide:has(> img.bg) .card strong, .slide:has(> img.bg) .box strong, .slide:has(> img.bg) .lead strong { color: var(--accent); }
+.slide:has(> img.bg) .card strong, .slide:has(> img.bg) .box strong, .slide:has(> img.bg) .lead strong,
+.slide:has(> img.bg) .card a, .slide:has(> img.bg) .box a, .slide:has(> img.bg) .lead a { color: var(--accent); }
 .slide:has(> img.bg) :not(pre) > code { background: rgba(255,255,255,.18); color: #fff; }
 .slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; overflow: hidden; }
 .slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; flex: 0 1 auto; object-fit: contain; border-radius: min(14px, var(--radius)); }
@@ -399,7 +415,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide svg [transform].pending { transform: none; }
 .slide.jump [data-say] { transition: none !important; }
 .no-anim *, .no-anim *::before, .no-anim *::after { transition: none !important; animation: none !important; }
-@media (prefers-reduced-motion: reduce) { .slide .pending { transform: none !important; } }
+@media (prefers-reduced-motion: reduce) { .slide .pending, .slide li.speaking::before, #start-play:hover { transform: none !important; } }
 
 /* --- captions --- */
 #caption { position: absolute; left: 0; right: 0; display: flex; justify-content: center; padding: 0 4%; pointer-events: none; opacity: 0; transition: opacity .2s, transform .25s; z-index: 5; }
@@ -505,8 +521,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #hlp-list dt { display: flex; gap: 4px; flex-wrap: wrap; }
 #hlp-list dd { margin: 0; color: rgba(255,255,255,.86); }
 #hlp-list kbd { display: inline-block; padding: 2px 7px; border-radius: 5px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); font: 700 12px/1.3 var(--mono); color: #fff; }
-.still #controls, .still #start, .still #caption, .still #toast, .still #overview, .still #sc-backdrop, .still #script, .still #help { display: none !important; }
-.capdemo #controls, .capdemo #start, .capdemo #toast, .capdemo #overview, .capdemo #sc-backdrop, .capdemo #script, .capdemo #help { display: none !important; }
+#blank { position: absolute; inset: 0; z-index: 29; background: #000; cursor: pointer; }
+#blank[hidden] { display: none; }
+.still #controls, .still #start, .still #caption, .still #toast, .still #overview, .still #sc-backdrop, .still #script, .still #help, .still #blank { display: none !important; }
+.capdemo #controls, .capdemo #start, .capdemo #toast, .capdemo #overview, .capdemo #sc-backdrop, .capdemo #script, .capdemo #help, .capdemo #blank { display: none !important; }
 #check-report { position: absolute; inset: 0; z-index: 99; margin: 0; padding: 16px; background: #fff; color: #000; font: 13px/1.5 monospace; overflow: auto; white-space: pre-wrap; }
 
 /* --- print / PDF: one slide per page (or slide + speaker notes with ?notes=1) --- */
@@ -528,7 +546,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   .slide li.speaking::before { transform: none !important; }
   .slide tbody tr.speaking > * { background-color: transparent !important; }
   .slide-footer { transform: none !important; }
-  #controls, #start, #caption, #toast, #overview, #sc-backdrop, #script, #help { display: none !important; }
+  #controls, #start, #caption, #toast, #overview, #sc-backdrop, #script, #help, #blank { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style>
@@ -651,6 +669,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     <dl id="hlp-list"></dl>
   </div>
 </div>
+<div id="blank" role="dialog" aria-modal="true" data-ta="blank" hidden></div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>
 
@@ -677,7 +696,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       voice: 'Narration voice', rate: 'Playback speed', sound: 'Sound on / off', captions: 'Captions on / off', transcript: 'Transcript',
       copy: 'Copy', copied: 'Transcript copied', searchPlaceholder: 'Filter transcript...', noMatch: 'No matching sentences', shortcuts: 'Keyboard shortcuts',
       prevNextSentence: 'Previous / next sentence (playing)', replaySentence: 'Replay current sentence (playing)', jumpSlide: 'Jump to slide (0 = start, 1–99)',
-      overview: 'All slides', closeOverview: 'Close', fullscreen: 'Full screen', exitFullscreen: 'Exit full screen',
+      overview: 'All slides', closeOverview: 'Close', fullscreen: 'Full screen', exitFullscreen: 'Exit full screen', blank: 'Blank screen (blackout)',
       silent: 'Play without sound (captions only)', rotate: 'Rotate your phone for a larger view', startKeys: 'Space / Enter to play · ← → slides · T transcript · ? shortcuts', replay: 'Play again',
       slide: 'slide', goto: 'Go to slide {n}', meta: '{n} slides · {t}', metaAudio: '{n} slides · {t} · Audio', aboutSec: 'about {n} sec', aboutMin: 'about {n} min',
       noVoice: 'No on-device voice is available, so the deck continues with captions only',
@@ -1384,12 +1403,13 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   $('#b-script').onclick = function () { scEl.hidden ? openScript() : closeScript(); };
   $('#sc-close').onclick = function () { closeScript(); };
 
-  /* ---------- keyboard shortcuts help ---------- */
+  /* ---------- keyboard shortcuts help & blackout ---------- */
   var hlpEl = $('#help'), hlpList = $('#hlp-list'), hlpResume = false;
+  var blankEl = $('#blank'), blankResume = false;
   [
     [['Space', 'K'], 'playPause'], [['←', '→'], 'prev'], [['↑', '↓'], 'prevNextSentence'],
     [['R'], 'replaySentence'], [['0–9'], 'jumpSlide'], [['<', '>'], 'rate'], [['M'], 'sound'], [['C'], 'captions'],
-    [['T'], 'transcript'], [['G'], 'overview'], [['F'], 'fullscreen'], [['?'], 'shortcuts']
+    [['T'], 'transcript'], [['G'], 'overview'], [['F'], 'fullscreen'], [['B'], 'blank'], [['?'], 'shortcuts']
   ].forEach(function (row) {
     var dt = document.createElement('dt');
     row[0].forEach(function (k) { var kb = document.createElement('kbd'); kb.textContent = k; dt.appendChild(kb); });
@@ -1413,6 +1433,24 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (!silent) { restoreFocus(); if (hlpResume) play(); }
     hlpResume = false;
   }
+  function openBlank() {
+    if (!blankEl || !blankEl.hidden) return;
+    var wasOpen = anyModalOpen(), wasResume = ovResume || scResume || hlpResume;
+    if (!ovEl.hidden) closeOverview(true);
+    if (!scEl.hidden) closeScript(true);
+    if (!hlpEl.hidden) closeHelp(true);
+    if (!wasOpen) saveFocus();
+    blankResume = playing || wasResume; if (playing) pause();
+    blankEl.hidden = false; setBgInert(true);
+  }
+  function closeBlank() {
+    if (!blankEl || blankEl.hidden) return;
+    blankEl.hidden = true; setBgInert(false);
+    restoreFocus();
+    if (blankResume) play();
+    blankResume = false;
+  }
+  if (blankEl) blankEl.addEventListener('click', closeBlank);
   $('#b-help').onclick = function () { hlpEl.hidden ? openHelp() : closeHelp(); };
   $('#hlp-close').onclick = function () { closeHelp(); };
   hlpEl.addEventListener('click', function (e) { if (e.target === hlpEl) closeHelp(); });
@@ -1449,7 +1487,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
     var zoomed = window.visualViewport && window.visualViewport.scale > 1.01;
     if (multi || zoomed) { if (!e.touches.length) multi = false; swiped = multi || zoomed; setTimeout(function () { swiped = false; }, 400); return; }
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('#controls') && startEl.hidden && ovEl.hidden && scEl.hidden && hlpEl.hidden) { swiped = true; go(cur + (dx < 0 ? 1 : -1)); setTimeout(function () { swiped = false; }, 400); }
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('#controls') && startEl.hidden && ovEl.hidden && scEl.hidden && hlpEl.hidden && (!blankEl || blankEl.hidden)) { swiped = true; go(cur + (dx < 0 ? 1 : -1)); setTimeout(function () { swiped = false; }, 400); }
   }, { passive: true });
   player.addEventListener('mousemove', poke);
   var jumpBuf = '', jumpTimer = 0;
@@ -1463,6 +1501,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (e.target.closest && e.target.closest('input,select,textarea')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     var k = e.key, hit = true;
+    if (blankEl && !blankEl.hidden) {
+      if (k === 'Escape' || k === 'b' || k === 'B' || k === ' ') { closeBlank(); e.preventDefault(); }
+      return;
+    }
     if (!hlpEl.hidden) { if (k === 'Escape' || k === '?') { closeHelp(); e.preventDefault(); } return; }
     if (!scEl.hidden) {
       if (k === 'Escape' || k === 't' || k === 'T') { closeScript(); e.preventDefault(); return; }
@@ -1518,6 +1560,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     }
     if (k === 'g' || k === 'G') { openOverview(); e.preventDefault(); return; }
     if (k === 't' || k === 'T') { openScript(); e.preventDefault(); return; }
+    if (k === 'b' || k === 'B') { openBlank(); e.preventDefault(); return; }
     if (k === '?') { openHelp(); e.preventDefault(); return; }
     if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button')) return; toggle(); }
     else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button')) return; startPlay(); }

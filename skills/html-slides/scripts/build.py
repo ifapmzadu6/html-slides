@@ -44,6 +44,7 @@ import difflib
 import errno
 import hashlib
 import html
+import json
 import mimetypes
 import os
 import pathlib
@@ -797,63 +798,96 @@ def extract(deck_path, out_path, *, overwrite=True):
     print("Source extracted: %s" % out_path)
 
 
-def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None, vtt=None, inline_images=True):
+def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None, vtt=None, inline_images=True, as_json=False):
     # 1. source lint
     meta, css, slides, issues, lines = lint(read_source(src), base_dir=src.parent, inline_images=inline_images)
     if any(i["level"] == "error" for i in issues):
-        print("Source lint: %s" % src.name)
-        check.print_issues(issues)
-        print("(The deck was NOT built.)")
+        if as_json:
+            print(json.dumps({"ok": False, "built": False, "source": str(src), "output": str(out), "slides": len(lines), "theme": meta["theme"], "issues": issues}, ensure_ascii=False, indent=2))
+        else:
+            print("Source lint: %s" % src.name)
+            check.print_issues(issues)
+            print("(The deck was NOT built.)")
         return 1
 
     # 2. assemble
     try:
         assemble(meta, css, slides, out, base_dir=src.parent, inline_images=inline_images)
     except OSError as e:
+        if as_json:
+            print(json.dumps({"ok": False, "built": False, "error": "Could not update %s: %s" % (out, e)}, ensure_ascii=False, indent=2))
+            return 2
         fail("Could not update %s: %s" % (out, e))
-    print("Built: %s (%d slides, theme %s)" % (out, len(lines), meta["theme"]), flush=True)
+    if not as_json:
+        print("Built: %s (%d slides, theme %s)" % (out, len(lines), meta["theme"]), flush=True)
     if no_render:
-        check.print_issues(issues)
-        print("(The rendered check was skipped, so overflow has NOT been verified.)")
+        if as_json:
+            print(json.dumps({"ok": True, "built": True, "rendered": False, "source": str(src), "output": str(out), "slides": len(lines), "theme": meta["theme"], "issues": issues}, ensure_ascii=False, indent=2))
+        else:
+            check.print_issues(issues)
+            print("(The rendered check was skipped, so overflow has NOT been verified.)")
         return 0
 
     # 3. rendered check
     try:
         rep = check.inspect(out)
     except check.CheckError as e:
-        check.print_issues(issues)
-        print("The rendered check could not run: %s" % e)
-        print("The deck was built, but overflow has NOT been verified. Tell the user so.")
+        if as_json:
+            print(json.dumps({"ok": False, "built": True, "rendered": False, "source": str(src), "output": str(out), "slides": len(lines), "theme": meta["theme"], "issues": issues, "error": str(e)}, ensure_ascii=False, indent=2))
+        else:
+            check.print_issues(issues)
+            print("The rendered check could not run: %s" % e)
+            print("The deck was built, but overflow has NOT been verified. Tell the user so.")
         return 2
-    bad = check.report(rep, lines=lines, extra=issues)
+    all_issues = list(issues) + list(rep.get("issues", []))
+    if as_json:
+        bad = any(i.get("level", "error") == "error" for i in all_issues)
+    else:
+        bad = check.report(rep, lines=lines, extra=issues)
+    artifacts = {}
+    log_out = sys.stderr if as_json else sys.stdout
     if shots:
         try:
             outdir, dense = check.shots(rep, shots)
         except check.CheckError as e:
-            print("Screenshots could not be saved: %s" % e)
+            print("Screenshots could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (outdir, dense))
+        artifacts["shots"] = str(outdir)
+        if not as_json:
+            print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (outdir, dense))
     if pdf:
         try:
             pdf_out = check.export_pdf(rep, pdf, notes=pdf_notes)
         except check.CheckError as e:
-            print("PDF could not be saved: %s" % e)
+            print("PDF could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if pdf_notes else ""))
+        artifacts["pdf"] = str(pdf_out)
+        if not as_json:
+            print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if pdf_notes else ""))
     if script:
         try:
             sc_out = check.export_script(rep, script)
         except check.CheckError as e:
-            print("Script could not be saved: %s" % e)
+            print("Script could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("Script: %s" % sc_out)
+        artifacts["script"] = str(sc_out)
+        if not as_json:
+            print("Script: %s" % sc_out)
     if vtt:
         try:
             vtt_out = check.export_vtt(rep, vtt)
         except check.CheckError as e:
-            print("WebVTT could not be saved: %s" % e)
+            print("WebVTT could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("WebVTT: %s" % vtt_out)
+        artifacts["vtt"] = str(vtt_out)
+        if not as_json:
+            print("WebVTT: %s" % vtt_out)
+    if as_json:
+        out_rep = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in rep.items() if k not in ("browser", "issues")}
+        payload = {"ok": not bad, "built": True, "rendered": True, "source": str(src), "output": str(out), "theme": meta["theme"], "issues": all_issues, "report": out_rep}
+        if artifacts:
+            payload["artifacts"] = artifacts
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 1 if bad else 0
 
 
@@ -872,6 +906,7 @@ def main():
     ap.add_argument("--extract", action="store_true", help="recover the source from a built deck")
     ap.add_argument("--watch", action="store_true", help="rebuild automatically whenever the source file changes")
     ap.add_argument("--open", action="store_true", help="open the built deck in the default browser")
+    ap.add_argument("--json", action="store_true", help="print build and check results as machine-readable JSON")
     a = ap.parse_args()
 
     src = pathlib.Path(a.source).resolve()
@@ -909,6 +944,8 @@ def main():
             fail("--no-inline-images cannot be combined with --extract.")
         if a.open:
             fail("--open cannot be combined with --extract.")
+        if a.json:
+            fail("--json cannot be combined with --extract.")
         if not a.out and os.path.lexists(out):
             fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         try:
@@ -931,8 +968,10 @@ def main():
         fail("--script cannot be combined with --no-render (script export requires headless Chrome/Edge).")
     if a.vtt and a.no_render:
         fail("--vtt cannot be combined with --no-render (WebVTT export requires headless Chrome/Edge).")
+    if a.json and a.watch:
+        fail("--json cannot be combined with --watch.")
 
-    status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images)
+    status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images, as_json=a.json)
     opened = False
     if a.open and status == 0 and out.is_file():
         webbrowser.open(out.as_uri())
