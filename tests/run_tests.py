@@ -1194,6 +1194,33 @@ def main():
     ok("player: split() matches build.sentences() on quoted/parenthesized text", qs_rep["texts"] == expected_q, qs_rep["texts"])
     ok("player: stat slide without h1/h2 uses .kicker as slide label", qs_rep["script"][0]["label"] == "1 / 1 KPI", qs_rep["script"][0]["label"])
 
+    # Batch 12 regression tests (CC icon evenodd, mobile #b-help hidden, footer --lift clears .source, #blank focus)
+    tpl_text = (SKILL / "assets" / "template.html").read_text(encoding="utf-8")
+    ok("template: #b-cc SVG path uses fill-rule=evenodd so caption bars cut out", 'id="b-cc"' in tpl_text and 'fill-rule="evenodd"' in tpl_text)
+    ok("template: #b-help mobile hide selector beats #btns button specificity", "#voice, #btns #b-help { display: none; }" in tpl_text)
+    lift_js = """<script>(function(){
+      var f = document.querySelector('.slide.active .slide-footer');
+      var src = document.querySelector('.slide.active .source');
+      var b = document.getElementById('blank');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+      var blankFocused = document.activeElement === b && !b.hidden;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      var pre = document.createElement('pre'); pre.id = 'ltest';
+      pre.textContent = JSON.stringify({
+        fTop: f.getBoundingClientRect().top,
+        srcBot: src.getBoundingClientRect().bottom,
+        blankFocused: blankFocused
+      });
+      document.body.appendChild(pre);
+    })();</script>"""
+    lift_html = tmp / "lift-test.html"
+    lift_html.write_text((ROOT / "examples" / "tablet-proposal.html").read_text(encoding="utf-8").replace("</body>", lift_js + "</body>"), encoding="utf-8")
+    r_lift = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", lift_html.as_uri() + "?noanim=1#2"])
+    m_lift = re.search(r'<pre id="ltest">(.*?)</pre>', r_lift.stdout, re.S)
+    lift_o = json.loads(html.unescape(m_lift.group(1))) if m_lift else {}
+    ok("player: lifted footer stays below .source on dense slides and #blank receives focus",
+       lift_o.get("fTop", 0) >= lift_o.get("srcBot", 999) and lift_o.get("blankFocused") is True, lift_o)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
