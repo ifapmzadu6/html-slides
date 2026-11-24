@@ -1169,6 +1169,22 @@ def main():
     bje = json.loads(r_bjson_err.stdout) if r_bjson_err.stdout.strip().startswith("{") else {}
     ok("build.py --json: outputs structured JSON on lint failure", r_bjson_err.returncode == 1 and bje.get("ok") is False and bje.get("built") is False and len(bje.get("issues", [])) > 0)
 
+    # Batch 10 regression tests (TTS closing bracket/oku-man, WebVTT XML escaping, add_voice --info)
+    ok("add_voice: _prep_qwen3_text avoids double period after closing bracket",
+       add_voice._prep_qwen3_text("「これはテストです。」") == "「これはテストです。」" and add_voice._prep_qwen3_text("「本当ですか？」") == "「本当ですか？」")
+    ok("add_voice: _prep_qwen3_text normalizes compound 億+万円 consistently",
+       add_voice._prep_qwen3_text("1億2,000万円です。") == "一億二千万円です。")
+    vtt_esc = tmp / "esc.vtt"
+    check.export_vtt({"script": [{"cues": [{"start": 0, "end": 1000, "text": "Use <section> & A --> B"}]}]}, vtt_esc)
+    ok("check.export_vtt: escapes & and < per WebVTT spec",
+       "Use &lt;section> &amp; A -> B" in vtt_esc.read_text(encoding="utf-8"))
+    r_vinfo = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(ea_deck), "--info"], capture_output=True, text=True)
+    ok("add_voice --info: reports embedded clip count, format and duration",
+       r_vinfo.returncode == 0 and "Clips: 2" in r_vinfo.stdout and "audio/wav" in r_vinfo.stdout and "Duration:" in r_vinfo.stdout, r_vinfo.stdout)
+    r_vinfo_empty = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(deck), "--info"], capture_output=True, text=True)
+    ok("add_voice --info: reports cleanly when no audio is embedded",
+       r_vinfo_empty.returncode == 0 and "No embedded audio" in r_vinfo_empty.stdout, r_vinfo_empty.stdout)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
