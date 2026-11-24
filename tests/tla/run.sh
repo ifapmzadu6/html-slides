@@ -8,14 +8,19 @@
 #   JAVA=/path/to/java TLA_JAR=/path/to/tla2tools.jar tests/tla/run.sh
 # Get tla2tools.jar from https://github.com/tlaplus/tlaplus/releases . MAXUSER sets the number of user actions explored (default 3).
 set -u
-cd "$(dirname "$0")"
+CALLER_PWD="$PWD"
+cd "$(dirname "$0")" || exit 1
 JAVA="${JAVA:-java}"
 JAR="${TLA_JAR:-tla2tools.jar}"
 FIXED=TRUE
 [ "${1:-}" = "before" ] && FIXED=FALSE
-case "$JAR" in /*) ;; *) JAR="$PWD/$JAR" ;; esac
+case "$JAR" in
+  /*) ;;
+  *) if [ -f "$CALLER_PWD/$JAR" ]; then JAR="$CALLER_PWD/$JAR"; else JAR="$PWD/$JAR"; fi ;;
+esac
 [ -f "$JAR" ] || { echo "tla2tools.jar was not found. Set TLA_JAR to its path."; exit 2; }
 WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT INT TERM
 status=0
 # environments: with or without embedded audio / with or without an on-device voice
 for env in "FALSE TRUE device-voice" "TRUE TRUE embedded-audio" "FALSE FALSE no-on-device-voice"; do
@@ -42,5 +47,4 @@ EOF
     awk '/^Error:/ {p=1} /^State 1:/ {skip=1} /^State 2:/ {skip=0} p && !skip' "$WORK/out.txt" | grep -vE "^(Linting|[0-9]+ states|The depth|Finished|The number|$)" | head -${LINES_MAX:-120}
   fi
 done
-rm -rf "$WORK"
 exit $status

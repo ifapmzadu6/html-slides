@@ -139,7 +139,7 @@ A slide is a fixed 1280×720px canvas that is scaled as a whole to fit the scree
 - The first play always needs a press of the play button, because browsers do not let a page start sound by itself.
 - Where no voice is available, the deck plays at the same pace with captions only.
 - Printing (Ctrl+P) gives a PDF with one slide per page; add `?notes=1` to include speaker notes below each slide when printing. You can also export directly from the command line with `build.py deck.slides.html --pdf deck.pdf` (add `--pdf-notes` for speaker notes), export the narration script as Markdown with `--script deck.md`, export timed captions as WebVTT with `--vtt deck.vtt`, auto-rebuild on save with `--watch`, or open the built deck in your browser with `--open`.
-- URL parameters for checking: `?still=1#3` (slide 3, static), `?autoplay=1&mute=1` (plays silently by itself), `?overview=1` (opens the slide overview), `?transcript=1` (opens the transcript panel), `?notes=1` (adds speaker notes for printing), `?check=1` (shows the check report).
+- URL parameters for checking: `?still=1#3` (slide 3, static), `?autoplay=1&mute=1` (plays silently by itself), `?rate=1.25` (playback speed: `0.75`, `1`, `1.25`, `1.5`, `2`), `?caps=0` (captions off), `?overview=1` (opens the slide overview), `?transcript=1` (opens the transcript panel), `?notes=1` (adds speaker notes for printing), `?check=1` (shows the check report). `check.py --json` outputs the check report as machine-readable JSON.
 
 ## When the check cannot run
 
