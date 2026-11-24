@@ -985,6 +985,18 @@ def main():
     ok("player: .voice with data-caption only falls back to speaking caption", check.inspect(vcap_only_deck)["texts"] == ["Caption fallback."])
     code_import_deck = built(tmp, "code-import.html", HEAD + '<section class="slide"><h2 data-say="CSS.">CSS</h2><pre><code>@import "theme.css";</code></pre></section>')
     ok("check.inspect: does not false-positive @import inside slide <code>", not any(i["type"] == "external" for i in check.inspect(code_import_deck)["issues"]))
+    _, _, _, iss_css_file, _ = build.lint(HEAD + '<style>.a { background: url(file:///tmp/x.png); }</style>\n' + COVER)
+    ok("build: rejects url(file://...) inside <style> block", any(i["type"] == "external" for i in errors(iss_css_file)))
+    hl_src = tmp / "hl-src.slides.html"
+    hl_src.write_text(HEAD + COVER, encoding="utf-8")
+    hl_alias = tmp / "hl-alias.vtt"
+    os.link(hl_src, hl_alias)
+    r_hl = subprocess.run([sys.executable, str(SKILL / "scripts" / "build.py"), str(hl_src), "--vtt", str(hl_alias)], capture_output=True, text=True)
+    ok("build.py: refuses --vtt hardlink colliding with source", r_hl.returncode == 2)
+    two_s = built(tmp, "vtt-sync.html", HEAD + '<section class="slide"><h2 data-say="First. Second.">Hi</h2></section>')
+    two_cues = check.inspect(two_s)["script"][0]["cues"]
+    ok("player: WebVTT cues keep 250ms inter-sentence gap without double-counting",
+       len(two_cues) == 2 and two_cues[1]["start"] - two_cues[0]["end"] == 250)
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
