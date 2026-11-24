@@ -533,8 +533,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   @page { size: 1280px 720px; margin: 0; }
   html, body { height: auto; overflow: visible; background: #fff; }
   #player { position: static; height: auto; overflow: visible; background: none; }
-  #stage { position: static; transform: none !important; height: auto; overflow: visible; }
-  .slide { position: relative; inset: auto; width: 1280px; height: 720px; opacity: 1 !important; visibility: visible !important; transition: none !important; break-after: page; page-break-after: always; }
+  #stage { position: static; transform: none !important; height: auto; overflow: visible; background: #fff; }
+  .slide { position: relative; inset: auto; width: 1280px; height: 720px; background-color: var(--bg); opacity: 1 !important; visibility: visible !important; transition: none !important; break-after: page; page-break-after: always; }
   .slide:last-of-type { break-after: auto; page-break-after: auto; }
   .with-notes .slide { break-after: auto; page-break-after: auto; }
   .with-notes .print-notes { display: block; width: 1280px; padding: 36px 64px 40px; background: #fff; color: #1c2333; font: 500 20px/1.75 var(--font); border-top: 4px solid var(--accent); break-after: page; page-break-after: always; }
@@ -814,10 +814,16 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   /* ---------- timeline ---------- */
   function clean(t) { return (t || '').replace(/\s+/g, ' ').replace(/([^\x00-\x7F])\s+(?=[^\x00-\x7F])/g, '$1').trim(); }
   function split(t) {
-    var out = [], b = '', cs = Array.from(clean(t)), END = '。！？!?', CLOSE = '。！？!?」』）)';
+    var out = [], b = '', cs = Array.from(clean(t)), END = '。！？!?', CLOSERS = '」』）)"”’', CLOSE = '。！？!?.' + CLOSERS;
     for (var i = 0; i < cs.length; i++) {
       var ch = cs[i]; b += ch;
-      if (END.indexOf(ch) >= 0 || (ch === '.' && (cs[i + 1] === ' ' || i === cs.length - 1))) {
+      var isDotEnd = false;
+      if (ch === '.') {
+        var j = i + 1;
+        while (j < cs.length && CLOSERS.indexOf(cs[j]) >= 0) j++;
+        isDotEnd = j === cs.length || cs[j] === ' ';
+      }
+      if (END.indexOf(ch) >= 0 || isDotEnd) {
         while (i + 1 < cs.length && CLOSE.indexOf(cs[i + 1]) >= 0) b += cs[++i];
         if (b.trim()) out.push(b.trim());
         b = '';
@@ -863,9 +869,11 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     return clean(out);
   }
   slides.forEach(function (s, i) {
-    var h = $('h1,h2', s);
+    var h = $('h1,h2', s) || $('.kicker,h3,blockquote', s);
+    var ht = h ? textWithBreaks(h) : '';
+    if (h && h.tagName === 'BLOCKQUOTE' && ht.length > 36) ht = ht.slice(0, 36) + '…';
     s.setAttribute('role', 'group'); s.setAttribute('aria-roledescription', tr('slide'));
-    s.setAttribute('aria-label', (i + 1) + ' / ' + slides.length + (h ? ' ' + textWithBreaks(h) : ''));
+    s.setAttribute('aria-label', (i + 1) + ' / ' + slides.length + (ht ? ' ' + ht : ''));
   });
 
   /* ---------- state ---------- */

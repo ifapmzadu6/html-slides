@@ -1185,6 +1185,15 @@ def main():
     ok("add_voice --info: reports cleanly when no audio is embedded",
        r_vinfo_empty.returncode == 0 and "No embedded audio" in r_vinfo_empty.stdout, r_vinfo_empty.stdout)
 
+    # Batch 11 regression tests (quoted/parenthesized sentence splitting parity, kicker/quote slide titles, dark PDF notes bg)
+    quote_sents = 'He said "Done." Wait (really!). Next.) End.'
+    expected_q = ['He said "Done."', 'Wait (really!).', 'Next.)', 'End.']
+    ok("build.sentences: splits quoted and parenthesized English sentences cleanly", build.sentences(quote_sents) == expected_q, build.sentences(quote_sents))
+    qs_deck = built(tmp, "quote-split.html", HEAD + '<section class="slide tc"><p class="kicker">KPI</p><p class="stat" data-say=\'' + quote_sents + '\'>99%</p></section>')
+    qs_rep = check.inspect(qs_deck)
+    ok("player: split() matches build.sentences() on quoted/parenthesized text", qs_rep["texts"] == expected_q, qs_rep["texts"])
+    ok("player: stat slide without h1/h2 uses .kicker as slide label", qs_rep["script"][0]["label"] == "1 / 1 KPI", qs_rep["script"][0]["label"])
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:

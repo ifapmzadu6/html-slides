@@ -114,12 +114,20 @@ def sentences(t):
     """Split text into sentences with the same rules as the player (split() in template.html)."""
     t = re.sub(r"\s+", " ", t or "")
     t = re.sub(r"([^\x00-\x7F])\s+(?=[^\x00-\x7F])", r"\1", t).strip()
+    closers = '」』）)"”’'
+    close_chars = "。！？!?." + closers
     out, b, i = [], "", 0
     while i < len(t):
         ch = t[i]
         b += ch
-        if ch in "。！？!?" or (ch == "." and (i == len(t) - 1 or t[i + 1] == " ")):
-            while i + 1 < len(t) and t[i + 1] in "。！？!?」』）)":
+        is_dot_end = False
+        if ch == ".":
+            j = i + 1
+            while j < len(t) and t[j] in closers:
+                j += 1
+            is_dot_end = j == len(t) or t[j] == " "
+        if ch in "。！？!?" or is_dot_end:
+            while i + 1 < len(t) and t[i + 1] in close_chars:
                 i += 1
                 b += t[i]
             if b.strip():
