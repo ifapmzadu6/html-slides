@@ -1094,6 +1094,67 @@ def main():
     ok("player: overview rewrites cloned SVG marker IDs instead of stripping them",
        'id="ov-1-arr"' in r_ov_svg.stdout and 'url(#ov-1-arr)' in r_ov_svg.stdout)
 
+    # Batch 8 regression tests (fuzzer security/crash fixes + embedded audio E2E)
+    for lbl, bad_frag, exp_type in (
+        ("null byte in img src", '<img src="\x00bad.png" alt="a" data-say="a.">', "missing-image"),
+        ("external srcset URL", '<img src="data:image/png;base64,AA==" srcset="https://evil.com/2x.png 2x" alt="a" data-say="a.">', "external"),
+        ("external video poster", '<video poster="https://evil.com/p.jpg"></video><h2 data-say="a.">a</h2>', "external"),
+        ("external object data", '<object data="https://evil.com/x.swf"></object><h2 data-say="a.">a</h2>', "external"),
+        ("javascript: link href", '<a href="javascript:alert(1)" data-say="a.">a</a>', "script"),
+        ("inline onclick handler", '<h2 onclick="alert(1)" data-say="a.">a</h2>', "script"),
+    ):
+        _, _, _, f_iss, _ = build.lint(HEAD + '<section class="slide title">' + bad_frag + '</section>', base_dir=tmp)
+        ok("build: catches " + lbl, any(i["type"] == exp_type for i in errors(f_iss)), f_iss)
+    ok("add_voice: clean_speech returns samples unchanged when sample_rate <= 0",
+       add_voice.clean_speech([0.1, 0.2, 0.3], 0) == [0.1, 0.2, 0.3])
+
+    # Embedded audio E2E browser test (valid WAV clips + corrupt clip fallback)
+    ea_deck = tmp / "embedded-audio-e2e.html"
+    ea_src = HEAD + '<section class="slide title"><h1 data-say="First clip.">First</h1></section>\n<section class="slide"><h2 data-say="Second clip.">Second</h2></section>\n'
+    ea_m, ea_c, ea_s, _, _ = build.lint(ea_src)
+    build.assemble(ea_m, ea_c, ea_s, ea_deck)
+    ea_wav = "data:audio/wav;base64," + base64.b64encode(add_voice.pcm_to_wav([0.05] * 8000, 24000)).decode("ascii")
+    add_voice.save_voice_data(ea_deck, ea_deck.read_text(encoding="utf-8"), {
+        "voice": "test", "label": "Test", "speed": 1.0,
+        "clips": {"First clip.": ea_wav, "Second clip.": ea_wav},
+        "durations": {"First clip.": 0.33, "Second clip.": 0.33},
+    })
+    EA_TEST_JS = r"""<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      const all = () => [...document.querySelectorAll('#stage > section.slide')];
+      const cur = () => all().findIndex(s => s.classList.contains('active')) + 1;
+      const meta = $('#start-meta').textContent;
+      $('#start-play').click();
+      await sleep(25000);
+      const pre = document.createElement('pre'); pre.id = 'eatest';
+      pre.textContent = JSON.stringify({ meta, cur: cur(), ended: !$('#player').classList.contains('playing') && !$('#start').hidden });
+      document.body.appendChild(pre);
+    })();</script>"""
+    ea_run = tmp / "ea-run.html"
+    ea_run.write_text(ea_deck.read_text(encoding="utf-8").replace("</body>", EA_TEST_JS + "</body>"), encoding="utf-8")
+    r_ea = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=60000", "--dump-dom", ea_run.as_uri()])
+    m_ea = re.search(r'<pre id="eatest">(.*?)</pre>', r_ea.stdout, re.S)
+    ea_o = json.loads(html.unescape(m_ea.group(1))) if m_ea else {}
+    ok("embedded audio E2E: displays Audio badge and plays to end cleanly",
+       "Audio" in ea_o.get("meta", "") and ea_o.get("cur") == 2 and ea_o.get("ended") and not js_errors(r_ea.stderr),
+       (ea_o, js_errors(r_ea.stderr)[:2]))
+
+    ea_bad = tmp / "ea-bad.html"
+    build.assemble(ea_m, ea_c, ea_s, ea_bad)
+    add_voice.save_voice_data(ea_bad, ea_bad.read_text(encoding="utf-8"), {
+        "voice": "test", "label": "Test", "speed": 1.0,
+        "clips": {"First clip.": "data:audio/wav;base64,AAAA", "Second clip.": "data:audio/wav;base64,AAAA"},
+        "durations": {"First clip.": 0.33, "Second clip.": 0.33},
+    })
+    ea_bad.write_text(ea_bad.read_text(encoding="utf-8").replace("</body>", EA_TEST_JS + "</body>"), encoding="utf-8")
+    r_eab = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=60000", "--dump-dom", ea_bad.as_uri()])
+    m_eab = re.search(r'<pre id="eatest">(.*?)</pre>', r_eab.stdout, re.S)
+    eab_o = json.loads(html.unescape(m_eab.group(1))) if m_eab else {}
+    ok("embedded audio E2E: corrupt clip falls back cleanly and still finishes",
+       eab_o.get("cur") == 2 and eab_o.get("ended") and not js_errors(r_eab.stderr),
+       (eab_o, js_errors(r_eab.stderr)[:2]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:

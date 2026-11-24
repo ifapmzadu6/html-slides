@@ -896,7 +896,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   var audioPausedText = null, preAudio = hasClips ? new Audio() : null;
   if (preAudio) preAudio.preload = 'auto';
   var SILENT = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
-  function stopSpeech() { if (synth) { try { synth.cancel(); } catch (e) {} } if (audio) { try { audio.pause(); } catch (e) {} } }
+  function stopSpeech() { if (synth) { try { synth.cancel(); } catch (e) {} } if (audio) { audio.onended = null; audio.onerror = null; try { audio.pause(); } catch (e) {} } }
   function preloadNext() {
     if (!preAudio || audioBroken) return;
     var T = timeline[cur], nextSay = null;
@@ -918,7 +918,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     function silent() { clearTimeout(wd); clearTimeout(st); wd = setTimeout(fin, dur); }
     if (muted || !text.trim()) { audioPausedText = null; silent(); return; }
     if (audio && clips[text] && !audioBroken) {
-      var afail = function () { if (fired || my !== tok) return; audioBroken = true; audioPausedText = null; fired = true; clearTimeout(wd); speak(text, my, done); };
+      var afail = function () { if (fired || my !== tok) return; audioBroken = true; audioPausedText = null; fired = true; clearTimeout(wd); updateUI(); speak(text, my, done); };
       audio.onended = fin; audio.onerror = afail;
       try {
         var resumeClip = audioPausedText === text && audio.currentTime > 0 && !audio.ended;
@@ -997,7 +997,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       return;
     }
     var c = T[cueIdx], p = c.parts[partIdx];
-    mid = true; inPart = true; partStart = Date.now(); partDur = p.dur; partPf = 0;
+    var resumingAudio = audio && audioPausedText === p.say && audio.currentTime > 0 && !audio.ended && !audioBroken;
+    mid = true; inPart = true; partStart = Date.now(); partDur = p.dur;
+    if (!resumingAudio) partPf = 0;
     if (c.reveal) c.el.classList.remove('pending');
     c.el.classList.add('speaking');
     setCaption(p.cap); updateProgress();
@@ -1115,7 +1117,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     for (var k = 0; k < cueIdx && k < T.length; k++) done += T[k].dur;
     if (T[cueIdx]) for (var j = 0; j < partIdx; j++) done += T[cueIdx].parts[j].dur;
     if (inPart && T[cueIdx] && T[cueIdx].parts[partIdx]) {
-      var pf = (audio && !audio.paused && isFinite(audio.duration) && audio.duration > 0)
+      var pf = (audio && !audioBroken && clips[T[cueIdx].parts[partIdx].say] && isFinite(audio.duration) && audio.duration > 0 && (!audio.paused || audio.currentTime > 0))
         ? Math.min(1, audio.currentTime / audio.duration)
         : Math.min(1, (Date.now() - partStart) * rate / Math.max(1, partDur));
       partPf = Math.max(partPf, Math.max(0, pf));
@@ -1378,6 +1380,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         cueIdx = Math.min(ci, T.length - 1);
         partIdx = Math.min(pi, T[cueIdx].parts.length - 1);
         mid = true;
+        T.forEach(function (c, k) { if (c.reveal) c.el.classList.toggle('pending', k > cueIdx); });
         T[cueIdx].el.classList.add('speaking');
         setCaption(T[cueIdx].parts[partIdx].cap);
       }

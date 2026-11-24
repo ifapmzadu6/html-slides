@@ -194,6 +194,8 @@ def kokoro_lang_code(voice):
 def clean_speech(samples, sample_rate=24000, threshold=0.0015, max_pause=0.45, keep_pause=0.24):
     """Trim leading/trailing silence and shorten abnormally long internal pauses without clipping voiceless consonants or endings."""
     samples = [x if math.isfinite(x) else 0.0 for x in samples]
+    if sample_rate <= 0:
+        return samples
     win = max(1, int(sample_rate * 0.02))
     n_frames = len(samples) // win
     if n_frames < 3:
