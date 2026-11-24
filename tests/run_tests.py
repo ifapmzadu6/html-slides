@@ -73,6 +73,8 @@ SELFTEST_JS = r"""
     ok('start: every element is revealed', pend() === 0);
     ok('start: only the current slide is visible', all().filter(s => getComputedStyle(s).visibility === 'visible').length === 1);
     ok('start: controls are labelled', $('#b-grid').getAttribute('aria-label') === 'All slides' && $('#start-silent').textContent.indexOf('captions only') > 0, $('#b-grid').getAttribute('aria-label'));
+    ok('dialogs: no stray title tooltip on dialog containers', !$('#overview').title && !$('#script').title && !$('#help').title);
+    ok('mute icon: shows muted slash path when muted', $('#i-mute').getAttribute('d').indexOf('13.5 3') >= 0);
 
     key('ArrowRight'); ok('right arrow while stopped: slide 2, start screen gone, all revealed', cur() === 2 && $('#start').hidden && pend() === 0);
     const barW = i => parseInt(document.querySelectorAll('#bar button i')[i].style.width, 10) || 0;
@@ -141,7 +143,10 @@ SELFTEST_JS = r"""
     ok('overview closed: thumbnails removed', document.querySelectorAll('.ov-item').length === 0);
     $('#count').click();
     ok('slide counter click: opens overview', !$('#overview').hidden && !playing());
-    key('Escape'); await sleep(200);
+    key('ArrowDown');
+    ok('overview: ArrowDown moves focus vertically', document.activeElement && document.activeElement.classList.contains('ov-item'));
+    $('#overview').dispatchEvent(new MouseEvent('click', { bubbles: true })); await sleep(200);
+    ok('overview: clicking backdrop closes overview', $('#overview').hidden && playing());
 
     key('t');
     ok('T: transcript opens and playback pauses', !$('#script').hidden && !playing());
@@ -154,6 +159,8 @@ SELFTEST_JS = r"""
     $('#sc-search').value = 'スマホ'; $('#sc-search').dispatchEvent(new Event('input'));
     const filteredLines = document.querySelectorAll('.sc-line:not([hidden])').length;
     ok('transcript search: filters sentences', filteredLines > 0 && filteredLines < totalLines, filteredLines + '/' + totalLines);
+    ok('transcript search: highlights matched substring with mark.sc-hit', document.querySelectorAll('.sc-line:not([hidden]) mark.sc-hit').length >= filteredLines);
+    ok('transcript search: search input has aria-label', !!$('#sc-search').getAttribute('aria-label'));
     ok('transcript search: shows match count', $('#sc-count').textContent === filteredLines + ' / ' + totalLines && $('#sc-empty').hidden);
     $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     ok('transcript search: ArrowDown focuses first matching line', document.activeElement && document.activeElement.classList.contains('sc-line'));
@@ -168,6 +175,8 @@ SELFTEST_JS = r"""
     $('#sc-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await sleep(300);
     ok('transcript search: Enter jumps to first matching sentence', $('#script').hidden && playing());
     ok('slide counter: aria-label includes current slide number', $('#count').getAttribute('aria-label').indexOf(cur() + ' / ' + N) === 0, $('#count').getAttribute('aria-label'));
+    key('t'); $('#sc-backdrop').click(); await sleep(200);
+    ok('transcript: clicking backdrop closes transcript', $('#script').hidden && playing());
     key('t'); document.querySelectorAll('.sc-slide')[2].click(); await sleep(300);
     ok('transcript click: jumps to slide 3 and resumes', cur() === 3 && playing() && $('#script').hidden);
 
@@ -997,6 +1006,19 @@ def main():
     two_cues = check.inspect(two_s)["script"][0]["cues"]
     ok("player: WebVTT cues keep 250ms inter-sentence gap without double-counting",
        len(two_cues) == 2 and two_cues[1]["start"] - two_cues[0]["end"] == 250)
+
+    # Batch 5 regression tests (bug fixes + UX/CLI improvements)
+    dense_cover_small = '<!--\ntitle: D\ntheme: light\ndensity: dense\n-->\n<section class="slide title"><h1 data-say="Hi.">Hi</h1><p style="font-size:18px">small</p></section>\n'
+    ok("build: dense deck still enforces 22px minimum on cover slide",
+       any(i["type"] == "small-text" for i in errors(build.lint(dense_cover_small)[3])))
+    dup_id_src = HEAD + '<section class="slide title"><h1 id="arr" data-say="A.">A</h1></section>\n<section class="slide"><h2 id="arr" data-say="B.">B</h2></section>\n'
+    ok("build: warns on duplicate id across slides",
+       any(i["type"] == "duplicate-id" and i["level"] == "warn" for i in build.lint(dup_id_src)[3]))
+    r_shots_col = subprocess.run([sys.executable, str(SKILL / "scripts" / "build.py"), str(hl_src), "--shots", str(hl_src)], capture_output=True, text=True)
+    ok("build.py: refuses --shots colliding with source", r_shots_col.returncode == 2)
+    r_chk_json = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--json"], capture_output=True, text=True)
+    parsed_chk = json.loads(r_chk_json.stdout) if r_chk_json.returncode == 0 else {}
+    ok("check.py --json: outputs valid JSON report", r_chk_json.returncode == 0 and parsed_chk.get("slides") == rep["slides"] and isinstance(parsed_chk.get("issues"), list))
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:

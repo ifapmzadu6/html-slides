@@ -7,6 +7,7 @@ build.py calls this automatically, so there is normally no need to run it direct
   python3 check.py deck.html --pdf deck.pdf  # also export as PDF (add --pdf-notes for speaker notes)
   python3 check.py deck.html --script deck.md  # also export the narration script as Markdown
   python3 check.py deck.html --vtt deck.vtt    # also export timed captions as WebVTT (.vtt)
+  python3 check.py deck.html --json            # print the check report as machine-readable JSON
 
 Uses headless Chrome / Edge / Chromium. If none is found, set the CHROME environment variable to its path.
 Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (no browser, ...)
@@ -318,6 +319,7 @@ def main():
     ap.add_argument("--pdf-notes", action="store_true", help="include speaker notes in the exported PDF")
     ap.add_argument("--script", metavar="FILE", help="export the narration script as Markdown")
     ap.add_argument("--vtt", metavar="FILE", help="export timed captions as WebVTT (.vtt)")
+    ap.add_argument("--json", action="store_true", help="print the check report as JSON")
     a = ap.parse_args()
     if a.pdf_notes and not a.pdf:
         print("ERROR: --pdf-notes requires --pdf FILE.")
@@ -332,37 +334,46 @@ def main():
     try:
         rep = inspect(a.deck)
     except CheckError as e:
-        print("The check could not run: %s" % e)
+        if a.json:
+            print(json.dumps({"error": str(e)}, ensure_ascii=False))
+        else:
+            print("The check could not run: %s" % e)
         return 2
-    bad = report(rep)
+    if a.json:
+        bad = any(i.get("level", "error") == "error" for i in rep.get("issues", []))
+        out_rep = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in rep.items() if k != "browser"}
+        print(json.dumps(out_rep, ensure_ascii=False, indent=2))
+    else:
+        bad = report(rep)
+    log_out = sys.stderr if a.json else sys.stdout
     if a.shots:
         try:
             out, dense = shots(rep, a.shots)
         except CheckError as e:
-            print("Screenshots could not be saved: %s" % e)
+            print("Screenshots could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (out, dense))
+        print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (out, dense), file=log_out)
     if a.pdf:
         try:
             pdf_out = export_pdf(rep, a.pdf, notes=a.pdf_notes)
         except CheckError as e:
-            print("PDF could not be saved: %s" % e)
+            print("PDF could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if a.pdf_notes else ""))
+        print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if a.pdf_notes else ""), file=log_out)
     if a.script:
         try:
             sc_out = export_script(rep, a.script)
         except CheckError as e:
-            print("Script could not be saved: %s" % e)
+            print("Script could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("Script: %s" % sc_out)
+        print("Script: %s" % sc_out, file=log_out)
     if a.vtt:
         try:
             vtt_out = export_vtt(rep, a.vtt)
         except CheckError as e:
-            print("WebVTT could not be saved: %s" % e)
+            print("WebVTT could not be saved: %s" % e, file=log_out)
             return 1 if bad else 2
-        print("WebVTT: %s" % vtt_out)
+        print("WebVTT: %s" % vtt_out, file=log_out)
     return 1 if bad else 0
 
 

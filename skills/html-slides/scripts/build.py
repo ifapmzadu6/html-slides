@@ -279,7 +279,16 @@ class Lint(HTMLParser):
         self.issues = []
         self.stack = []     # open tags: dict(tag, line, cls, kids, text)
         self.slides = []    # dict(line, cls, cues)
+        self.seen_ids = {}  # id -> first line number
         self.style_line = None
+
+    def is_dense_slide(self):
+        if not self.slides:
+            return self.deck_dense
+        cls = self.slides[-1]["cls"]
+        if "dense" in cls:
+            return True
+        return self.deck_dense and not any(c in cls for c in ("title", "section", "end"))
 
     def add(self, level, typ, msg, hint, line=None):
         self.issues.append({"line": line or self.getpos()[0], "type": typ, "level": level, "msg": msg, "hint": hint,
@@ -361,11 +370,18 @@ class Lint(HTMLParser):
             if sym_m:
                 self.add("warn", "say-symbol", 'data-say contains a symbol ("%s") that speech engines may skip or misread.' % sym_m.group(0),
                          "Spell out symbols in data-say (for example, 二重丸, 丸, 三角, バツ) and keep ◎ / ○ / △ / × in data-caption.")
+        elem_id = (a.get("id") or "").strip()
+        if elem_id and self.in_slide():
+            if elem_id in self.seen_ids:
+                self.add("warn", "duplicate-id", 'Duplicate id="%s" (first defined on line %d).' % (elem_id, self.seen_ids[elem_id]),
+                         "Give each element (especially SVG <marker> / <linearGradient> IDs) a unique id across the deck.")
+            else:
+                self.seen_ids[elem_id] = line
         style_val = a.get("style") or ""
         if style_val and re.search(r"url\(\s*[\"']?((https?:)?//|file:)", style_val, re.I):
             self.add("error", "external", "<%s> loads an external URL in its style attribute." % tag, NO_EXTERNAL)
         m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", style_val, re.I)
-        floor = 14 if (self.deck_dense or (self.slides and "dense" in self.slides[-1]["cls"])) else 22
+        floor = 14 if self.is_dense_slide() else 22
         if m and float(m.group(1)) < floor and not any(e["tag"] == "svg" for e in self.stack) and tag != "svg":
             self.add("error", "small-text", "font-size: %spx is too small (minimum %dpx)." % (m.group(1), floor), check.HINTS["small-text"])
         for k in ("src", "href", "xlink:href"):
@@ -435,7 +451,7 @@ class Lint(HTMLParser):
         clean_t = re.sub(r"\s+", "", e["text"])
         n = int(round(sum(1 if ord(ch) > 0x7F else 0.5 for ch in clean_t)))
         tag, cls = e["tag"], e["cls"]
-        if self.deck_dense or (self.slides and "dense" in self.slides[-1]["cls"]):
+        if self.is_dense_slide():
             return  # dense slides have no item-count guideline; the rendered check catches real overflow
         if tag in ("ul", "ol") and "flow" not in cls and e["kids"] > 5 and not any(x["tag"] in ("li", "td") or "box" in x["cls"] or "card" in x["cls"] for x in self.stack):
             self.add("warn", "many-items", "The list has %d items (4 fit comfortably, 5 at most)." % e["kids"],
@@ -810,7 +826,7 @@ def main():
         fail("The output path is a directory: " + str(out))
     if out.exists() and out.samefile(src):
         fail("The output path is the same as the source. Pass -o with a different name.")
-    for flag, val in (("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
+    for flag, val in (("--shots", a.shots), ("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
         if val:
             ep = pathlib.Path(val).resolve()
             if ep == src or ep == out or (ep.exists() and (ep.samefile(src) or (out.exists() and ep.samefile(out)))):
