@@ -1061,6 +1061,39 @@ def main():
     ok("player: URL ?rate=1.5&caps=0 sets initial speed and captions off",
        '>1.5x</button>' in r_rc.stdout and 'id="b-cc"' in r_rc.stdout and 'aria-pressed="false"' in r_rc.stdout)
 
+    # Batch 7 regression tests (WCAG AA contrast across all 10 themes, heading <br> spacing, overview SVG ID rewrite)
+    tpl_txt = (SKILL / "assets" / "template.html").read_text(encoding="utf-8")
+    thm_blk = re.search(r"/\* THEME:START.*?/\* THEME:END \*/", tpl_txt, re.S).group(0)
+    thm_defs = re.findall(r':root(?::where\(\[data-theme="([^"]+)"\]\))?\s*\{([^}]+)\}', thm_blk)
+    def _hex_lum(hx):
+        hx = hx.lstrip("#")
+        rgb = [int(hx[j:j + 2], 16) / 255.0 for j in (0, 2, 4)]
+        rgb = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+        return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+    def _cr(a, b):
+        la, lb = _hex_lum(a), _hex_lum(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    base_vars = dict(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})", thm_defs[0][1]))
+    wcag_fails = []
+    for tname, tbody in thm_defs:
+        tv = dict(base_vars, **dict(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})", tbody)))
+        for fg_k in ("fg", "muted", "accent", "ok", "warn", "ng"):
+            for bg_k in ("bg", "card", "accent-soft"):
+                if _cr(tv[fg_k], tv[bg_k]) < 4.5:
+                    wcag_fails.append("%s:%s/%s" % (tname or "light", fg_k, bg_k))
+        for fg_k, bg_k in (("on-accent", "accent"), ("section-fg", "section-bg")):
+            if _cr(tv[fg_k], tv[bg_k]) < 4.5:
+                wcag_fails.append("%s:%s/%s" % (tname or "light", fg_k, bg_k))
+    ok("themes: all 10 themes meet WCAG AA >= 4.5:1 across all colour pairs", not wcag_fails, wcag_fails)
+
+    br_deck = built(tmp, "br-heading.html", HEAD + '<section class="slide title"><h1 data-say="Expense claims.">Expense<br>Claims</h1></section>\n<section class="slide"><h2 data-say="Diagram.">Diagram</h2><figure class="grow"><svg viewBox="0 0 200 100"><defs><marker id="arr" markerWidth="5" markerHeight="5" refX="2" refY="2.5" orient="auto"><path d="M0 0 L5 2.5 L0 5z" fill="var(--accent)"/></marker></defs><path d="M10 50 H180" stroke="var(--accent)" stroke-width="6" marker-end="url(#arr)"/></svg></figure></section>')
+    br_rep = check.inspect(br_deck)
+    ok("player: heading <br> preserves word spacing in aria-label and script",
+       br_rep["script"][0]["label"] == "1 / 2 Expense Claims", br_rep["script"][0]["label"])
+    r_ov_svg = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", br_deck.as_uri() + "?overview=1"])
+    ok("player: overview rewrites cloned SVG marker IDs instead of stripping them",
+       'id="ov-1-arr"' in r_ov_svg.stdout and 'url(#ov-1-arr)' in r_ov_svg.stdout)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
