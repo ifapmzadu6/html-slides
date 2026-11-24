@@ -421,7 +421,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #caption { position: absolute; left: 0; right: 0; display: flex; justify-content: center; padding: 0 4%; pointer-events: none; opacity: 0; transition: opacity .2s, transform .25s; z-index: 5; }
 #caption.show { opacity: 1; }
 #caption-text { word-break: auto-phrase; background: rgba(0,0,0,.8); color: #fff; padding: .28em .8em; border-radius: .35em; line-height: 1.45; text-align: center; max-width: 46em; font-weight: 500; text-wrap: balance; }
-#player.ui #caption.overlay { transform: translateY(-58px); }
+#player.ui #caption.overlay { transform: translateY(var(--cap-lift, -58px)); }
 .capdemo #player #caption.overlay { transform: none; }
 
 /* --- control bar --- */
@@ -446,9 +446,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #time { padding: 0 8px 0 2px; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: .72; font-size: 13px; }
 #btns .sp { flex: 1; }
 #voice { max-width: 190px; height: 32px; margin: 0 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.4); background: rgba(0,0,0,.5); color: #fff; font: 500 13px var(--font); }
-@media (max-width: 640px) { #voice, #b-help { display: none; } #btns button { width: 40px; } #btns #b-rate { width: auto; min-width: 40px; padding: 0 6px; } #btns #count { width: auto; padding: 0 8px; } }
+@media (max-width: 640px) { #voice, #btns #b-help { display: none; } #btns button { width: 40px; } #btns #b-rate { width: auto; min-width: 40px; padding: 0 6px; } #btns #count { width: auto; padding: 0 8px; } }
 @media (max-width: 520px) { #time { display: none; } }
-@media (max-width: 440px) { #controls { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); } #btns { gap: 0; } #btns button { width: 34px; } #btns #b-rate { width: auto; min-width: 36px; padding: 0 4px; font-size: 13px; } #btns #count { width: auto; padding: 0 4px; font-size: 13px; } #btns svg { width: 22px; height: 22px; } #b-full { display: none !important; } }
+@media (max-width: 440px) { #controls { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); } #btns { gap: 0; } #btns button { width: 36px; } #btns #b-rate { width: auto; min-width: 38px; padding: 0 5px; font-size: 13px; } #btns #count { width: auto; padding: 0 5px; font-size: 13px; } #btns svg { width: 22px; height: 22px; } #btns #b-full { display: none !important; } }
 
 /* --- start screen --- */
 #start { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; background: rgba(8,12,22,.72); color: #fff; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
@@ -464,6 +464,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #start-keys { font-size: 12px; opacity: .55; letter-spacing: .02em; display: none; }
 @media (orientation: portrait) and (max-width: 640px) { #start-hint { display: block; } }
 @media (hover: hover) and (min-width: 641px) { #start-keys { display: block; } }
+@media (max-height: 420px) { #start { gap: 10px; padding: 12px 24px; } #start-play { width: 68px; height: 68px; } #start-silent { padding: 7px 16px; } }
 #toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 30; background: rgba(0,0,0,.85); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 90%; }
 #toast.show { opacity: 1; }
 /* --- slide overview --- */
@@ -480,6 +481,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .ov-frame { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background: var(--bg); color: var(--fg); pointer-events: none; text-align: left; }
 .ov-num { position: absolute; left: 6px; bottom: 6px; min-width: 26px; padding: 3px 7px; border-radius: 6px; background: rgba(0,0,0,.75); color: #fff; font: 700 13px/1.2 var(--font); text-align: center; }
 .ov-dur { position: absolute; right: 6px; bottom: 6px; padding: 3px 7px; border-radius: 6px; background: rgba(0,0,0,.75); color: rgba(255,255,255,.88); font: 600 12px/1.2 var(--font); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .ov-num { left: 4px; bottom: 4px; min-width: 20px; padding: 2px 5px; font-size: 11px; } .ov-dur { right: 4px; bottom: 4px; padding: 2px 5px; font-size: 11px; } }
 /* --- transcript panel --- */
 #sc-backdrop { position: absolute; inset: 0; z-index: 25; background: rgba(8,12,22,.36); }
 #sc-backdrop[hidden] { display: none; }
@@ -522,6 +524,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #hlp-list dd { margin: 0; color: rgba(255,255,255,.86); }
 #hlp-list kbd { display: inline-block; padding: 2px 7px; border-radius: 5px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); font: 700 12px/1.3 var(--mono); color: #fff; }
 #blank { position: absolute; inset: 0; z-index: 29; background: #000; cursor: pointer; }
+#blank:focus { outline: none; }
 #blank[hidden] { display: none; }
 .still #controls, .still #start, .still #caption, .still #toast, .still #overview, .still #sc-backdrop, .still #script, .still #help, .still #blank { display: none !important; }
 .capdemo #controls, .capdemo #start, .capdemo #toast, .capdemo #overview, .capdemo #sc-backdrop, .capdemo #script, .capdemo #help, .capdemo #blank { display: none !important; }
@@ -645,7 +648,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     <select id="voice" data-ta="voice" hidden></select>
     <button id="b-rate" type="button" data-ta="rate" data-key="&lt; &gt;">1x</button>
     <button id="b-mute" type="button" data-ta="sound" data-key="M" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path id="i-mute" d="M3 9v6h4l5 5V4L7 9zm11.5-1.2v8.4a4.5 4.5 0 0 0 0-8.4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
-    <button id="b-cc" type="button" data-ta="captions" data-key="C" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm1 9h8v2H5zm10 0h4v2h-4zM5 9h4v2H5zm6 0h8v2h-8z"/></svg></button>
+    <button id="b-cc" type="button" data-ta="captions" data-key="C" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm1 9h8v2H5zm10 0h4v2h-4zM5 9h4v2H5zm6 0h8v2h-8z"/></svg></button>
     <button id="b-script" type="button" data-ta="transcript" data-key="T"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h16v2H4zm0 4h11v2H4zm0 4h11v2H4z"/></svg></button>
     <button id="b-grid" type="button" data-ta="overview" data-key="G"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z"/></svg></button>
     <button id="b-help" type="button" data-ta="shortcuts" data-key="?"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-1-5h2v2h-2zm1-9a3.5 3.5 0 0 0-3.5 3.5h2A1.5 1.5 0 1 1 13.5 10c0 .7-.4 1.1-1.1 1.6-.8.6-1.4 1.2-1.4 2.4h2c0-.7.3-1.1 1-1.6.9-.6 1.5-1.3 1.5-2.4A3.5 3.5 0 0 0 12 6z"/></svg></button>
@@ -669,7 +672,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     <dl id="hlp-list"></dl>
   </div>
 </div>
-<div id="blank" role="dialog" aria-modal="true" data-ta="blank" hidden></div>
+<div id="blank" role="dialog" aria-modal="true" data-ta="blank" tabindex="-1" hidden></div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>
 
@@ -931,6 +934,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
   /* ---------- display ---------- */
   function showSlide(i, full) {
+    if (!slides.length) return;
     cur = Math.max(0, Math.min(slides.length - 1, i));
     slides.forEach(function (s, k) { s.classList.toggle('active', k === cur); s.setAttribute('aria-hidden', k === cur ? 'false' : 'true'); });
     var sl = slides[cur]; sl.classList.add('jump'); // when switching slides, set the reveal state without animating
@@ -1198,7 +1202,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
   /* ---------- slide overview ---------- */
   var ovEl = $('#overview'), ovGrid = $('#ov-grid'), ovResume = false, modalFocus = null;
-  function anyModalOpen() { return !ovEl.hidden || !scEl.hidden || !hlpEl.hidden; }
+  function anyModalOpen() { return !ovEl.hidden || !scEl.hidden || !hlpEl.hidden || !!(blankEl && !blankEl.hidden); }
   function setBgInert(on) { stage.inert = on; $('#controls').inert = on; startEl.inert = on; }
   function saveFocus() { var a = document.activeElement; if (a && a !== document.body && a.focus) modalFocus = a; }
   function restoreFocus() { var a = modalFocus; modalFocus = null; if (a && document.contains(a)) { try { a.focus({ preventScroll: true }); } catch (e) {} } }
@@ -1450,6 +1454,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (!wasOpen) saveFocus();
     blankResume = playing || wasResume; if (playing) pause();
     blankEl.hidden = false; setBgInert(true);
+    blankEl.focus({ preventScroll: true });
   }
   function closeBlank() {
     if (!blankEl || blankEl.hidden) return;
@@ -1570,7 +1575,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (k === 't' || k === 'T') { openScript(); e.preventDefault(); return; }
     if (k === 'b' || k === 'B') { openBlank(); e.preventDefault(); return; }
     if (k === '?') { openHelp(); e.preventDefault(); return; }
-    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button')) return; toggle(); }
+    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button')) return; if (!startEl.hidden && !playing) startPlay(); else toggle(); }
     else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button')) return; startPlay(); }
     else if (k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === 'n' || k === 'N') { if (k === 'Enter' && e.target.closest && e.target.closest('button')) return; go(cur + 1); }
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace' || k === 'p' || k === 'P') go(cur - 1);
@@ -1597,10 +1602,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var below = spare >= 150; // portrait screens: captions go below the slide
     var top = below ? Math.max(0, (spare - 130) / 2) : spare / 2;
     stage.style.transform = 'translate(' + ((vw - sw) / 2) + 'px,' + top + 'px) scale(' + s + ')';
-    stage.style.setProperty('--lift', below ? '0px' : (-Math.max(0, 92 - (vh - top - sh)) / s) + 'px');
+    stage.style.setProperty('--lift', below ? '0px' : (-Math.min(52, Math.max(0, 70 - (vh - top - sh) - 30 * s) / s)) + 'px');
     capEl.classList.toggle('overlay', !below);
-    if (below) { capEl.style.top = (top + sh + 12) + 'px'; capEl.style.bottom = 'auto'; capEl.style.fontSize = Math.max(15, Math.min(20, vw / 22)) + 'px'; }
-    else { capEl.style.top = 'auto'; capEl.style.bottom = (vh - top - sh + 16 * s) + 'px'; capEl.style.fontSize = Math.max(13, 27 * s) + 'px'; }
+    if (below) { capEl.style.top = (top + sh + 12) + 'px'; capEl.style.bottom = 'auto'; capEl.style.fontSize = Math.max(15, Math.min(20, vw / 22)) + 'px'; capEl.style.setProperty('--cap-lift', '0px'); }
+    else { var capBot = vh - top - sh + 16 * s; capEl.style.top = 'auto'; capEl.style.bottom = capBot + 'px'; capEl.style.fontSize = Math.max(13, 27 * s) + 'px'; capEl.style.setProperty('--cap-lift', (-Math.max(0, 74 - capBot)) + 'px'); }
   }
   window.addEventListener('resize', fit);
   window.addEventListener('orientationchange', function () { setTimeout(fit, 200); });
