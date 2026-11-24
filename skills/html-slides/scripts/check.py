@@ -14,6 +14,7 @@ Exit codes: 0 = no errors, 1 = errors found, 2 = could not run (no browser, ...)
 """
 import argparse
 import html
+from html.parser import HTMLParser
 import json
 import os
 import pathlib
@@ -98,6 +99,79 @@ def run(browser, args, timeout=120):
         shutil.rmtree(prof, ignore_errors=True)
 
 
+_EXT_TAGS = {"script", "link", "img", "iframe", "image", "use", "video", "audio", "source", "embed", "object"}
+_EXT_URL_RE = re.compile(r"((https?|ftp|javascript|file):|//)", re.I)
+_CSS_EXT_RE = re.compile(r"url\(\s*[\"']?((https?:)?//|file:)|@import\b", re.I)
+_INLINE_STYLE_EXT_RE = re.compile(r"url\(\s*[\"']?((https?:)?//|file:)", re.I)
+
+
+class _ExternalCheck(HTMLParser):
+    """Inspect real HTML tags, style attributes, and <style> blocks for external or file: resources."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.found = False
+        self._in_style = False
+        self._style_chunks = []
+
+    def _check_tag(self, tag, attrs):
+        if self.found:
+            return
+        if tag == "style":
+            self._in_style = True
+            self._style_chunks = []
+            return
+        for k, v in attrs:
+            val = (v or "").strip()
+            if not val:
+                continue
+            if k == "style" and _INLINE_STYLE_EXT_RE.search(val):
+                self.found = True
+                return
+            if tag in _EXT_TAGS:
+                if k in ("src", "href", "xlink:href", "poster", "data") and _EXT_URL_RE.match(val):
+                    self.found = True
+                    return
+                if k == "srcset":
+                    for item in val.split(","):
+                        u = item.strip().split()[0] if item.strip() else ""
+                        if _EXT_URL_RE.match(u):
+                            self.found = True
+                            return
+
+    def handle_starttag(self, tag, attrs):
+        self._check_tag(tag, attrs)
+
+    def handle_startendtag(self, tag, attrs):
+        self._check_tag(tag, attrs)
+        if tag == "style":
+            self._in_style = False
+
+    def handle_data(self, data):
+        if self._in_style and not self.found:
+            self._style_chunks.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "style" and self._in_style:
+            css = re.sub(r"/\*.*?\*/", "", "".join(self._style_chunks), flags=re.S)
+            if _CSS_EXT_RE.search(css):
+                self.found = True
+            self._in_style = False
+            self._style_chunks = []
+
+
+def has_external_resources(src):
+    """Return True if HTML source loads any external or file:// resource."""
+    p = _ExternalCheck()
+    p.feed(src)
+    p.close()
+    if not p.found and p._in_style and p._style_chunks:
+        css = re.sub(r"/\*.*?\*/", "", "".join(p._style_chunks), flags=re.S)
+        if _CSS_EXT_RE.search(css):
+            p.found = True
+    return p.found
+
+
 def inspect(deck):
     """Render the deck and return the check report (dict). Raises CheckError when the check cannot run."""
     deck = pathlib.Path(deck).resolve()
@@ -126,9 +200,7 @@ def inspect(deck):
     for i in rep["issues"]:
         if isinstance(i, dict):
             i.setdefault("level", "error")
-    styles = "\n".join(re.findall(r"<style\b[^>]*>(.*?)</style>", src, re.I | re.S))
-    if (re.search(r"<(script|link|img|iframe|image|use|video|audio|source|embed|object)\b[^>]*\b(src|href|poster|data|srcset)=[\"'][^\"']*?((https?:)?//|file:)|url\(\s*[\"']?((https?:)?//|file:)", src, re.I)
-            or re.search(r"@import\b", styles, re.I)):
+    if has_external_resources(src):
         rep["issues"].append({"slide": 0, "type": "external", "level": "error",
                               "msg": "The deck loads an external URL. It will not show offline or when the file is opened by double-click.",
                               "hint": "Embed images as a data URI or inline SVG. Do not load external CSS, fonts or scripts."})
@@ -321,16 +393,26 @@ def main():
     ap.add_argument("--vtt", metavar="FILE", help="export timed captions as WebVTT (.vtt)")
     ap.add_argument("--json", action="store_true", help="print the check report as JSON")
     a = ap.parse_args()
-    if a.pdf_notes and not a.pdf:
-        print("ERROR: --pdf-notes requires --pdf FILE.")
+    def cli_err(msg):
+        if a.json:
+            print(json.dumps({"error": msg}, ensure_ascii=False))
+        else:
+            print("ERROR: " + msg)
         return 2
+
+    if a.pdf_notes and not a.pdf:
+        return cli_err("--pdf-notes requires --pdf FILE.")
     deck_path = pathlib.Path(a.deck).resolve()
-    for flag, target in (("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
+    seen_targets = []
+    for flag, target in (("--shots", a.shots), ("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
         if target:
             tpath = pathlib.Path(target).resolve()
             if tpath == deck_path or (tpath.exists() and deck_path.exists() and tpath.samefile(deck_path)):
-                print("ERROR: %s output path must not overwrite the input deck." % flag)
-                return 2
+                return cli_err("%s output path must not overwrite the input deck." % flag)
+            for pflag, ppath in seen_targets:
+                if tpath == ppath or (tpath.exists() and ppath.exists() and tpath.samefile(ppath)):
+                    return cli_err("%s and %s cannot write to the same output path." % (pflag, flag))
+            seen_targets.append((flag, tpath))
     try:
         rep = inspect(a.deck)
     except CheckError as e:

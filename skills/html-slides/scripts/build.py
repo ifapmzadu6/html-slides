@@ -100,8 +100,11 @@ INSIDE_SLIDES = 'Put all content inside <section class="slide"> ... </section>.'
 NO_EXTERNAL = "Use a local image file (build.py embeds it automatically) or inline SVG. Do not load external URLs."
 
 
-def fail(msg):
-    print("ERROR: " + msg)
+def fail(msg, as_json=False):
+    if as_json:
+        print(json.dumps({"ok": False, "built": False, "error": msg}, ensure_ascii=False, indent=2))
+    else:
+        print("ERROR: " + msg)
     sys.exit(2)
 
 
@@ -139,13 +142,13 @@ def sentences(t):
     return out
 
 
-def read_source(path):
+def read_source(path, as_json=False):
     try:
         return path.read_text(encoding="utf-8-sig")  # tolerate a leading BOM
     except UnicodeDecodeError:
-        fail("%s is not valid UTF-8. Save the file as UTF-8 and run again." % path)
+        fail("%s is not valid UTF-8. Save the file as UTF-8 and run again." % path, as_json=as_json)
     except OSError as e:
-        fail("Could not read %s: %s" % (path, e))
+        fail("Could not read %s: %s" % (path, e), as_json=as_json)
 
 
 def _local_image_path(src_val, base_dir):
@@ -181,7 +184,7 @@ def _image_mime(path):
 
 
 class _ImgLocator(HTMLParser):
-    """Locate real <img> start tags (ignoring HTML comments and attribute values containing '>')."""
+    """Locate real <img> and SVG <image> start tags (ignoring HTML comments and attribute values containing '>')."""
 
     def __init__(self, body):
         super().__init__(convert_charrefs=False)
@@ -190,7 +193,7 @@ class _ImgLocator(HTMLParser):
         self.tags = []
 
     def _record(self, tag):
-        if tag != "img":
+        if tag not in ("img", "image"):
             return
         line, col = self.getpos()
         if line < 1 or line > len(self.line_offsets):
@@ -198,7 +201,7 @@ class _ImgLocator(HTMLParser):
         start = self.line_offsets[line - 1] + col
         raw = self.get_starttag_text() or ""
         if raw:
-            self.tags.append((start, start + len(raw)))
+            self.tags.append((tag, start, start + len(raw)))
 
     def handle_starttag(self, tag, attrs):
         self._record(tag)
@@ -207,10 +210,14 @@ class _ImgLocator(HTMLParser):
         self._record(tag)
 
 
-def _rewrite_img_src(tag, base, cache):
-    """Replace only the actual src attribute on an <img> start tag (never inside other attribute values)."""
-    for m in ATTR_TOKEN_RE.finditer(tag, 4):
-        if m.group(1).lower() != "src":
+def _rewrite_img_src(tag_name, tag, base, cache):
+    """Replace local src (<img>) or href/xlink:href (<image>) attributes with base64 data URIs."""
+    target_attrs = ("src",) if tag_name == "img" else ("href", "xlink:href")
+    head = re.match(r"<\s*[A-Za-z0-9:_-]+", tag)
+    scan_from = head.end() if head else len(tag)
+    out, prev = [], 0
+    for m in ATTR_TOKEN_RE.finditer(tag, scan_from):
+        if m.group(1).lower() not in target_attrs:
             continue
         if m.group(2) is not None:
             val, quote = m.group(2), '"'
@@ -219,21 +226,26 @@ def _rewrite_img_src(tag, base, cache):
         elif m.group(4) is not None:
             val, quote = m.group(4), '"'
         else:
-            return tag
+            continue
         path = _local_image_path(html.unescape(val), base)
         if path is None or not path.is_file():
-            return tag
+            continue
         uri = cache.get(path)
         if uri is None:
             b64 = base64.b64encode(path.read_bytes()).decode("ascii")
             uri = "data:%s;base64,%s" % (_image_mime(path), b64)
             cache[path] = uri
-        return tag[:m.start()] + m.group(1) + "=" + quote + uri + quote + tag[m.end():]
-    return tag
+        out.append(tag[prev:m.start()])
+        out.append(m.group(1) + "=" + quote + uri + quote)
+        prev = m.end()
+    if not out:
+        return tag
+    out.append(tag[prev:])
+    return "".join(out)
 
 
 def inline_local_images(slides_html, base_dir):
-    """Embed local <img src="..."> files as base64 data URIs so the output remains a single self-contained HTML file."""
+    """Embed local <img src> and SVG <image href> files as base64 data URIs so the output stays a single HTML file."""
     base = pathlib.Path(base_dir).resolve()
     loc = _ImgLocator(slides_html)
     loc.feed(slides_html)
@@ -242,9 +254,9 @@ def inline_local_images(slides_html, base_dir):
         return slides_html
     cache = {}
     out, prev = [], 0
-    for start, end in loc.tags:
+    for tag_name, start, end in loc.tags:
         out.append(slides_html[prev:start])
-        out.append(_rewrite_img_src(slides_html[start:end], base, cache))
+        out.append(_rewrite_img_src(tag_name, slides_html[start:end], base, cache))
         prev = end
     out.append(slides_html[prev:])
     return "".join(out)
@@ -263,10 +275,13 @@ def _watch_sig(src):
     loc.feed(text)
     loc.close()
     seen = set()
-    for start, end in loc.tags:
+    for tag_name, start, end in loc.tags:
         tag = text[start:end]
-        for m in ATTR_TOKEN_RE.finditer(tag, 4):
-            if m.group(1).lower() != "src":
+        target_attrs = ("src",) if tag_name == "img" else ("href", "xlink:href")
+        head = re.match(r"<\s*[A-Za-z0-9:_-]+", tag)
+        scan_from = head.end() if head else len(tag)
+        for m in ATTR_TOKEN_RE.finditer(tag, scan_from):
+            if m.group(1).lower() not in target_attrs:
                 continue
             val = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
             p = _local_image_path(html.unescape(val or ""), src.parent)
@@ -277,7 +292,6 @@ def _watch_sig(src):
                     sigs.append((str(p), ist.st_mtime_ns, ist.st_size))
                 except OSError:
                     sigs.append((str(p), 0, 0))
-            break
     return tuple(sigs)
 
 
@@ -419,33 +433,38 @@ class Lint(HTMLParser):
                 if re.match(r"((https?|ftp|javascript|file):|//)", u, re.I):
                     self.add("error", "external", "<%s> loads an external URL in srcset (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
                     break
-        if tag == "img" and self.in_slide():
-            img_src = (a.get("src") or "").strip()
-            if not img_src or "\x00" in img_src:
-                self.add("error", "missing-image", "<img> has no valid src attribute.",
-                         'Add src="path/to/image.png" relative to the .slides.html file.')
-            if "alt" not in a:
-                self.add("warn", "missing-alt", "<img> has no alt attribute.",
-                         'Add alt="short description" (or alt="" for a decorative/background image).')
-            if self.base_dir is not None and img_src and "\x00" not in img_src and not re.match(r"file:", img_src, re.I):
-                img_path = _local_image_path(img_src, self.base_dir)
-                if img_path is not None:
-                    try:
-                        is_f = img_path.is_file()
-                    except OSError:
-                        is_f = False
-                    if not is_f:
-                        self.add("error", "missing-image", 'Image file not found: "%s" (looked for %s).' % (img_src, img_path),
-                                 "Check the image path relative to the .slides.html file, or place the image in that folder.")
-                    elif self.inline_images:
+        if tag in ("img", "image") and self.in_slide():
+            img_refs = [(a.get("src") or "").strip()] if tag == "img" else [
+                (a.get(k) or "").strip() for k in ("href", "xlink:href") if k in a
+            ]
+            if tag == "img":
+                img_src = img_refs[0]
+                if not img_src or "\x00" in img_src:
+                    self.add("error", "missing-image", "<img> has no valid src attribute.",
+                             'Add src="path/to/image.png" relative to the .slides.html file.')
+                if "alt" not in a:
+                    self.add("warn", "missing-alt", "<img> has no alt attribute.",
+                             'Add alt="short description" (or alt="" for a decorative/background image).')
+            for img_src in img_refs:
+                if self.base_dir is not None and img_src and "\x00" not in img_src and not re.match(r"file:", img_src, re.I):
+                    img_path = _local_image_path(img_src, self.base_dir)
+                    if img_path is not None:
                         try:
-                            size = img_path.stat().st_size
+                            is_f = img_path.is_file()
                         except OSError:
-                            size = 0
-                        if size > LARGE_IMAGE_BYTES:
-                            mb = size / (1024 * 1024)
-                            self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
-                                     "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
+                            is_f = False
+                        if not is_f:
+                            self.add("error", "missing-image", 'Image file not found: "%s" (looked for %s).' % (img_src, img_path),
+                                     "Check the image path relative to the .slides.html file, or place the image in that folder.")
+                        elif self.inline_images:
+                            try:
+                                size = img_path.stat().st_size
+                            except OSError:
+                                size = 0
+                            if size > LARGE_IMAGE_BYTES:
+                                mb = size / (1024 * 1024)
+                                self.add("warn", "large-image", 'Image "%s" is %.1f MB and will be embedded into the HTML.' % (img_src, mb),
+                                         "Resize or compress the image (for example to 1280px wide JPEG/WebP) to keep the single-file HTML fast to share.")
         if tag in ("td", "th") and self.stack:
             row = next((e for e in reversed(self.stack) if e["tag"] == "tr"), None)
             if row is not None:
@@ -471,8 +490,22 @@ class Lint(HTMLParser):
                 entry["cells"] = 0
             self.stack.append(entry)
 
+    def _in_foreign(self):
+        for e in reversed(self.stack):
+            if e["tag"] == "foreignobject":
+                return False
+            if e["tag"] in ("svg", "math"):
+                return True
+        return False
+
     def handle_startendtag(self, tag, attrs):
+        in_foreign = tag in ("svg", "math") or self._in_foreign()
         self.handle_starttag(tag, attrs)
+        if tag == "style":
+            self.style_line = None
+        if tag not in VOID and not in_foreign:
+            self.add("error", "self-closing", "<%s ... /> cannot be self-closing in HTML." % tag,
+                     "Write <%s>...</%s> with an explicit closing tag." % (tag, tag))
         if tag not in VOID and self.stack and self.stack[-1]["tag"] == tag:
             self.stack.pop()
 
@@ -808,7 +841,7 @@ def extract(deck_path, out_path, *, overwrite=True):
 
 def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=False, script=None, vtt=None, inline_images=True, as_json=False):
     # 1. source lint
-    meta, css, slides, issues, lines = lint(read_source(src), base_dir=src.parent, inline_images=inline_images)
+    meta, css, slides, issues, lines = lint(read_source(src, as_json=as_json), base_dir=src.parent, inline_images=inline_images)
     if any(i["level"] == "error" for i in issues):
         if as_json:
             print(json.dumps({"ok": False, "built": False, "source": str(src), "output": str(out), "slides": len(lines), "theme": meta["theme"], "issues": issues}, ensure_ascii=False, indent=2))
@@ -853,49 +886,52 @@ def build_once(src, out, *, no_render=False, shots=None, pdf=None, pdf_notes=Fal
     else:
         bad = check.report(rep, lines=lines, extra=issues)
     artifacts = {}
+    export_err = None
     log_out = sys.stderr if as_json else sys.stdout
     if shots:
         try:
             outdir, dense = check.shots(rep, shots)
+            artifacts["shots"] = str(outdir)
+            if not as_json:
+                print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (outdir, dense))
         except check.CheckError as e:
-            print("Screenshots could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        artifacts["shots"] = str(outdir)
-        if not as_json:
-            print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (outdir, dense))
-    if pdf:
+            export_err = "Screenshots could not be saved: %s" % e
+    if not export_err and pdf:
         try:
             pdf_out = check.export_pdf(rep, pdf, notes=pdf_notes)
+            artifacts["pdf"] = str(pdf_out)
+            if not as_json:
+                print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if pdf_notes else ""))
         except check.CheckError as e:
-            print("PDF could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        artifacts["pdf"] = str(pdf_out)
-        if not as_json:
-            print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if pdf_notes else ""))
-    if script:
+            export_err = "PDF could not be saved: %s" % e
+    if not export_err and script:
         try:
             sc_out = check.export_script(rep, script)
+            artifacts["script"] = str(sc_out)
+            if not as_json:
+                print("Script: %s" % sc_out)
         except check.CheckError as e:
-            print("Script could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        artifacts["script"] = str(sc_out)
-        if not as_json:
-            print("Script: %s" % sc_out)
-    if vtt:
+            export_err = "Script could not be saved: %s" % e
+    if not export_err and vtt:
         try:
             vtt_out = check.export_vtt(rep, vtt)
+            artifacts["vtt"] = str(vtt_out)
+            if not as_json:
+                print("WebVTT: %s" % vtt_out)
         except check.CheckError as e:
-            print("WebVTT could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        artifacts["vtt"] = str(vtt_out)
-        if not as_json:
-            print("WebVTT: %s" % vtt_out)
+            export_err = "WebVTT could not be saved: %s" % e
     if as_json:
         out_rep = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in rep.items() if k not in ("browser", "issues")}
-        payload = {"ok": not bad, "built": True, "rendered": True, "source": str(src), "output": str(out), "theme": meta["theme"], "issues": all_issues, "report": out_rep}
+        payload = {"ok": (not bad and not export_err), "built": True, "rendered": True, "source": str(src), "output": str(out), "theme": meta["theme"], "issues": all_issues, "report": out_rep}
         if artifacts:
             payload["artifacts"] = artifacts
+        if export_err:
+            payload["error"] = export_err
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+    elif export_err:
+        print(export_err, file=log_out)
+    if export_err:
+        return 1 if bad else 2
     return 1 if bad else 0
 
 
@@ -917,9 +953,12 @@ def main():
     ap.add_argument("--json", action="store_true", help="print build and check results as machine-readable JSON")
     a = ap.parse_args()
 
+    def cli_fail(msg):
+        fail(msg, as_json=a.json)
+
     src = pathlib.Path(a.source).resolve()
     if not src.is_file():
-        fail("File not found: " + str(src))
+        cli_fail("File not found: " + str(src))
     if a.out:
         out = pathlib.Path(a.out).resolve()
     elif a.extract:
@@ -928,56 +967,61 @@ def main():
         name = src.name[:-len(".slides.html")] if src.name.endswith(".slides.html") else src.stem + ".out"
         out = src.with_name(name + ".html")
     if out.is_dir():
-        fail("The output path is a directory: " + str(out))
+        cli_fail("The output path is a directory: " + str(out))
     if out.exists() and out.samefile(src):
-        fail("The output path is the same as the source. Pass -o with a different name.")
+        cli_fail("The output path is the same as the source. Pass -o with a different name.")
+    seen_exports = []
     for flag, val in (("--shots", a.shots), ("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
         if val:
             ep = pathlib.Path(val).resolve()
             if ep == src or ep == out or (ep.exists() and (ep.samefile(src) or (out.exists() and ep.samefile(out)))):
-                fail("%s output path cannot be the same as the source or built HTML." % flag)
+                cli_fail("%s output path cannot be the same as the source or built HTML." % flag)
+            for pflag, ppath in seen_exports:
+                if ep == ppath or (ep.exists() and ppath.exists() and ep.samefile(ppath)):
+                    cli_fail("%s and %s cannot write to the same output path." % (pflag, flag))
+            seen_exports.append((flag, ep))
 
     if a.extract:
         if a.watch:
-            fail("--watch cannot be combined with --extract.")
+            cli_fail("--watch cannot be combined with --extract.")
         if a.shots:
-            fail("--shots cannot be combined with --extract.")
+            cli_fail("--shots cannot be combined with --extract.")
         if a.pdf or a.pdf_notes:
-            fail("--pdf cannot be combined with --extract.")
+            cli_fail("--pdf cannot be combined with --extract.")
         if a.script:
-            fail("--script cannot be combined with --extract.")
+            cli_fail("--script cannot be combined with --extract.")
         if a.vtt:
-            fail("--vtt cannot be combined with --extract.")
+            cli_fail("--vtt cannot be combined with --extract.")
         if a.no_inline_images:
-            fail("--no-inline-images cannot be combined with --extract.")
+            cli_fail("--no-inline-images cannot be combined with --extract.")
         if a.open:
-            fail("--open cannot be combined with --extract.")
+            cli_fail("--open cannot be combined with --extract.")
         if a.json:
-            fail("--json cannot be combined with --extract.")
+            cli_fail("--json cannot be combined with --extract.")
         if not a.out and os.path.lexists(out):
-            fail("%s already exists. Pass -o to overwrite it explicitly." % out)
+            cli_fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         try:
             extract(src, out, overwrite=bool(a.out))
         except FileExistsError as e:
             if a.out:
-                fail("Could not extract to %s: %s" % (out, e))
-            fail("%s already exists. Pass -o to overwrite it explicitly." % out)
+                cli_fail("Could not extract to %s: %s" % (out, e))
+            cli_fail("%s already exists. Pass -o to overwrite it explicitly." % out)
         except OSError as e:
-            fail("Could not extract to %s: %s" % (out, e))
+            cli_fail("Could not extract to %s: %s" % (out, e))
         return 0
 
     if a.pdf_notes and not a.pdf:
-        fail("--pdf-notes requires --pdf FILE.")
+        cli_fail("--pdf-notes requires --pdf FILE.")
     if a.shots and a.no_render:
-        fail("--shots cannot be combined with --no-render (screenshots require headless Chrome/Edge).")
+        cli_fail("--shots cannot be combined with --no-render (screenshots require headless Chrome/Edge).")
     if a.pdf and a.no_render:
-        fail("--pdf cannot be combined with --no-render (PDF export requires headless Chrome/Edge).")
+        cli_fail("--pdf cannot be combined with --no-render (PDF export requires headless Chrome/Edge).")
     if a.script and a.no_render:
-        fail("--script cannot be combined with --no-render (script export requires headless Chrome/Edge).")
+        cli_fail("--script cannot be combined with --no-render (script export requires headless Chrome/Edge).")
     if a.vtt and a.no_render:
-        fail("--vtt cannot be combined with --no-render (WebVTT export requires headless Chrome/Edge).")
+        cli_fail("--vtt cannot be combined with --no-render (WebVTT export requires headless Chrome/Edge).")
     if a.json and a.watch:
-        fail("--json cannot be combined with --watch.")
+        cli_fail("--json cannot be combined with --watch.")
 
     status = build_once(src, out, no_render=a.no_render, shots=a.shots, pdf=a.pdf, pdf_notes=a.pdf_notes, script=a.script, vtt=a.vtt, inline_images=not a.no_inline_images, as_json=a.json)
     opened = False
