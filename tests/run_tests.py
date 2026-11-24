@@ -187,6 +187,10 @@ SELFTEST_JS = r"""
     $('#b-help').click();
     ok('help button: opens shortcuts help and pauses', !$('#help').hidden && !playing());
     key('Escape'); await sleep(300);
+    key('b');
+    ok('B: blackout opens and pauses playback', !$('#blank').hidden && !playing());
+    key('b'); await sleep(300);
+    ok('B again: blackout closes and resumes playback', $('#blank').hidden && playing());
 
     key('c'); ok('C: captions off', !$('#caption').classList.contains('show') && $('#b-cc').getAttribute('aria-pressed') === 'false');
     key('c'); await sleep(50); ok('C: captions on', ($('#caption').classList.contains('show') || cap() === '') && $('#b-cc').getAttribute('aria-pressed') === 'true');
@@ -1154,6 +1158,16 @@ def main():
     ok("embedded audio E2E: corrupt clip falls back cleanly and still finishes",
        eab_o.get("cur") == 2 and eab_o.get("ended") and not js_errors(r_eab.stderr),
        (eab_o, js_errors(r_eab.stderr)[:2]))
+
+    # Batch 9 regression tests (build.py --json, link/bg/section CSS)
+    r_bjson = subprocess.run([sys.executable, str(SKILL / "scripts" / "build.py"), str(starter), "-o", str(tmp / "json-out.html"), "--no-render", "--json"], capture_output=True, text=True)
+    bj = json.loads(r_bjson.stdout) if r_bjson.returncode == 0 else {}
+    ok("build.py --json --no-render: outputs valid JSON summary", r_bjson.returncode == 0 and bj.get("ok") is True and bj.get("built") is True and bj.get("slides") == rep["slides"])
+    bad_json_src = tmp / "bad-json.slides.html"
+    bad_json_src.write_text("<section class=\"slide\"><h2>no header</h2></section>", encoding="utf-8")
+    r_bjson_err = subprocess.run([sys.executable, str(SKILL / "scripts" / "build.py"), str(bad_json_src), "--json"], capture_output=True, text=True)
+    bje = json.loads(r_bjson_err.stdout) if r_bjson_err.stdout.strip().startswith("{") else {}
+    ok("build.py --json: outputs structured JSON on lint failure", r_bjson_err.returncode == 1 and bje.get("ok") is False and bje.get("built") is False and len(bje.get("issues", [])) > 0)
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
