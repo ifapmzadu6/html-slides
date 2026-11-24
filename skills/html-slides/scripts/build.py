@@ -559,7 +559,7 @@ def parse_source(text):
         problems.append({"line": setting_lines.get("theme", 1), "slide": 0, "type": "unknown-theme", "level": "error", "msg": 'Theme "%s" does not exist.' % meta["theme"],
                          "hint": near(meta["theme"], THEMES) + "Available themes: " + ", ".join(THEMES) + "."})
     css, slides = SourceStyles(body).split()
-    if css and re.search(r"url\(\s*[\"']?(https?:)?//|@import\b", css, re.I):
+    if css and re.search(r"url\(\s*[\"']?((https?:)?//|file:)|@import\b", css, re.I):
         style_pos = text.lower().find("<style")
         style_ln = text[:style_pos].count("\n") + 1 if style_pos >= 0 else 1
         problems.append({"line": style_ln, "slide": 0, "type": "external", "level": "error",
@@ -813,7 +813,7 @@ def main():
     for flag, val in (("--pdf", a.pdf), ("--script", a.script), ("--vtt", a.vtt)):
         if val:
             ep = pathlib.Path(val).resolve()
-            if ep == src or ep == out:
+            if ep == src or ep == out or (ep.exists() and (ep.samefile(src) or (out.exists() and ep.samefile(out)))):
                 fail("%s output path cannot be the same as the source or built HTML." % flag)
 
     if a.extract:
