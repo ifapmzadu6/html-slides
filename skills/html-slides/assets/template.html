@@ -494,8 +494,13 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #sc-close { width: 40px; font-size: 22px; }
 #sc-copy:hover, #sc-close:hover { background: rgba(255,255,255,.24); }
 #sc-search-wrap { position: relative; padding: 10px 14px 4px; flex: none; }
-#sc-search { width: 100%; height: 36px; padding: 0 54px 0 12px; border: 1px solid rgba(255,255,255,.24); border-radius: 8px; background: rgba(255,255,255,.08); color: #fff; font: 500 14px var(--font); }
-#sc-count { position: absolute; right: 24px; top: 50%; transform: translateY(-35%); font: 600 12px/1 var(--font); color: rgba(255,255,255,.6); font-variant-numeric: tabular-nums; pointer-events: none; }
+#sc-search { width: 100%; height: 36px; padding: 0 92px 0 12px; border: 1px solid rgba(255,255,255,.24); border-radius: 8px; background: rgba(255,255,255,.08); color: #fff; font: 500 14px var(--font); }
+#sc-search::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+#sc-count { position: absolute; right: 44px; top: 50%; transform: translateY(-35%); font: 600 12px/1 var(--font); color: rgba(255,255,255,.65); font-variant-numeric: tabular-nums; pointer-events: none; }
+#sc-clear { position: absolute; right: 18px; top: 50%; transform: translateY(-42%); width: 24px; height: 24px; border: 0; border-radius: 6px; background: rgba(255,255,255,.16); color: #fff; font: 700 15px/1 var(--font); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+#sc-clear:hover { background: rgba(255,255,255,.28); }
+#sc-clear:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+#sc-clear[hidden] { display: none; }
 #sc-empty { padding: 28px 12px; text-align: center; color: rgba(255,255,255,.55); font: 500 14px/1.5 var(--font); }
 #sc-empty[hidden] { display: none; }
 #sc-search::placeholder { color: rgba(255,255,255,.5); }
@@ -662,7 +667,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 <div id="sc-backdrop" hidden></div>
 <aside id="script" role="dialog" aria-modal="true" data-ta="transcript" hidden>
   <div id="sc-head"><span data-t="transcript"></span><button id="sc-copy" type="button" data-t="copy"></button><button id="sc-close" type="button" data-ta="closeOverview" data-key="Esc">×</button></div>
-  <div id="sc-search-wrap"><input id="sc-search" type="search" autocomplete="off"><span id="sc-count"></span></div>
+  <div id="sc-search-wrap"><input id="sc-search" type="search" autocomplete="off"><span id="sc-count"></span><button id="sc-clear" type="button" data-ta="clearSearch" hidden>×</button></div>
   <div id="sc-body"></div>
   <div id="sc-empty" data-t="noMatch" hidden></div>
 </aside>
@@ -697,7 +702,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     en: {
       play: 'Play', pause: 'Pause', playPause: 'Play / pause', prev: 'Previous slide', next: 'Next slide',
       voice: 'Narration voice', rate: 'Playback speed', sound: 'Sound on / off', captions: 'Captions on / off', transcript: 'Transcript',
-      copy: 'Copy', copied: 'Transcript copied', searchPlaceholder: 'Filter transcript...', noMatch: 'No matching sentences', shortcuts: 'Keyboard shortcuts',
+      copy: 'Copy', copied: 'Transcript copied', searchPlaceholder: 'Filter transcript...', clearSearch: 'Clear search', noMatch: 'No matching sentences', shortcuts: 'Keyboard shortcuts',
       prevNextSentence: 'Previous / next sentence (playing)', replaySentence: 'Replay current sentence (playing)', jumpSlide: 'Jump to slide (0 = start, 1–99)',
       overview: 'All slides', closeOverview: 'Close', fullscreen: 'Full screen', exitFullscreen: 'Exit full screen', blank: 'Blank screen (blackout)',
       silent: 'Play without sound (captions only)', rotate: 'Rotate your phone for a larger view', startKeys: 'Space / Enter to play · ← → slides · T transcript · ? shortcuts', replay: 'Play again',
@@ -1233,7 +1238,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
             if (!v || v.indexOf('#') < 0) return;
             var nv = v.replace(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/g, function (m, q, id) { return idMap[id] ? 'url(' + q + '#' + idMap[id] + q + ')' : m; });
             if ((attr.name === 'href' || attr.name === 'xlink:href') && nv.charAt(0) === '#' && idMap[nv.slice(1)]) nv = '#' + idMap[nv.slice(1)];
-            if (nv !== v) e.setAttribute(attr.name, nv);
+            if (nv !== v) { if (attr.namespaceURI) e.setAttributeNS(attr.namespaceURI, attr.name, nv); else e.setAttribute(attr.name, nv); }
           });
         });
       }
@@ -1256,7 +1261,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     ovResume = false;
   }
   /* ---------- transcript panel ---------- */
-  var scBg = $('#sc-backdrop'), scEl = $('#script'), scBody = $('#sc-body'), scSearch = $('#sc-search'), scCount = $('#sc-count'), scEmpty = $('#sc-empty'), scResume = false;
+  var scBg = $('#sc-backdrop'), scEl = $('#script'), scBody = $('#sc-body'), scSearch = $('#sc-search'), scCount = $('#sc-count'), scClear = $('#sc-clear'), scEmpty = $('#sc-empty'), scResume = false;
   if (scSearch) { scSearch.placeholder = tr('searchPlaceholder'); scSearch.setAttribute('aria-label', tr('searchPlaceholder')); }
   function renderHighlight(el, raw, q) {
     el.textContent = '';
@@ -1289,6 +1294,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       g.head.hidden = !any;
     });
     if (scCount) scCount.textContent = q ? (matched + ' / ' + total) : '';
+    if (scClear) scClear.hidden = !q;
     if (scEmpty) scEmpty.hidden = !q || matched > 0;
   }
   function copyTranscript() {
@@ -1360,6 +1366,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     scBody.innerHTML = '';
     if (scSearch) scSearch.value = '';
     if (scCount) scCount.textContent = '';
+    if (scClear) scClear.hidden = true;
     if (scEmpty) scEmpty.hidden = true;
     var curT = timeline[cur] || [], curCi = Math.min(cueIdx, Math.max(0, curT.length - 1));
     var curPi = curT[curCi] ? Math.min(partIdx, Math.max(0, curT[curCi].parts.length - 1)) : 0;
@@ -1411,6 +1418,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       }
     });
   }
+  if (scClear) scClear.onclick = function () { if (scSearch) { scSearch.value = ''; filterScript(); scSearch.focus(); } };
   $('#sc-copy').onclick = copyTranscript;
   $('#b-script').onclick = function () { scEl.hidden ? openScript() : closeScript(); };
   $('#sc-close').onclick = function () { closeScript(); };
@@ -1499,7 +1507,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   player.addEventListener('touchend', function (e) {
     var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
     var zoomed = window.visualViewport && window.visualViewport.scale > 1.01;
-    if (multi || zoomed) { if (!e.touches.length) multi = false; swiped = multi || zoomed; setTimeout(function () { swiped = false; }, 400); return; }
+    if (multi || zoomed) { var wasMulti = multi; if (!e.touches.length) multi = false; swiped = wasMulti || zoomed; setTimeout(function () { swiped = false; }, 400); return; }
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('#controls') && startEl.hidden && ovEl.hidden && scEl.hidden && hlpEl.hidden && (!blankEl || blankEl.hidden)) { swiped = true; go(cur + (dx < 0 ? 1 : -1)); setTimeout(function () { swiped = false; }, 400); }
   }, { passive: true });
   player.addEventListener('mousemove', poke);
@@ -1650,7 +1658,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         }
         var hasText = Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.trim(); });
         var fs = parseFloat(getComputedStyle(el).fontSize);
-        if (el.ownerSVGElement && el.getScreenCTM) { var m = el.getScreenCTM(); if (m) fs = fs * Math.sqrt(m.a * m.a + m.b * m.b) / sc; } // for SVG text, account for the viewBox scale
+        if (el.ownerSVGElement && el.getScreenCTM) { var m = el.getScreenCTM(); if (m) fs = fs * Math.min(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d)) / sc; } // for SVG text, account for the viewBox scale
         if (hasText && fs < minFont - 0.5) add(i, 'small-text', desc(el) + ' renders at ' + Math.round(fs) + 'px (the minimum is ' + (dense ? '14px on dense slides' : '22px') + ')');
       });
       $$('img', s).forEach(function (im) {
@@ -1695,7 +1703,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   else if (qs.has('overview')) { startEl.hidden = true; openOverview(); }
   else if (qs.has('transcript')) { startEl.hidden = true; openScript(); }
   else if (qs.has('autoplay')) play(qs.has('mute'));
-  window.addEventListener('hashchange', function () { var raw = (location.hash || '').replace('#', ''), n = raw ? parseInt(raw, 10) : 1; if (n > 0 && n <= slides.length && n - 1 !== cur) go(n - 1); });
+  window.addEventListener('hashchange', function () { var raw = (location.hash || '').replace('#', ''), n = raw ? parseInt(raw, 10) : 1; if (n > 0 && n <= slides.length && n - 1 !== cur) { if (!ovEl.hidden) closeOverview(true); if (!scEl.hidden) closeScript(true); if (!hlpEl.hidden) closeHelp(true); if (blankEl && !blankEl.hidden) closeBlank(); go(n - 1); } });
 })();
 </script>
 </body>

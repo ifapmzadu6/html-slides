@@ -1320,6 +1320,58 @@ def main():
          patch.object(sys, "argv", ["add_voice.py", str(ea_deck), "--engine", "say", "--speaker", "NoSuchVoice"]):
         ok("add_voice: --engine say rejects unknown --speaker early", add_voice.main() == 2)
 
+    # Batch 15 regression tests (transcript #sc-clear, hashchange closes modals, SVG non-uniform scale check, themes.html E2E)
+    sc_clear_js = """<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+      const inp = $('#sc-search'), clr = $('#sc-clear');
+      const hiddenInit = clr.hidden;
+      inp.value = 'テスト'; inp.dispatchEvent(new Event('input'));
+      const shownQuery = !clr.hidden && $('#sc-count').textContent.indexOf('/') > 0;
+      clr.click();
+      const cleared = inp.value === '' && clr.hidden && document.activeElement === inp;
+      location.hash = '#2';
+      await sleep(100);
+      const closedOnHash = $('#script').hidden && document.querySelectorAll('#stage > section.slide')[1].classList.contains('active');
+      const pre = document.createElement('pre'); pre.id = 'c11';
+      pre.textContent = JSON.stringify({ hiddenInit, shownQuery, cleared, closedOnHash });
+      document.body.appendChild(pre);
+    })();</script>"""
+    c11_html = tmp / "c11.html"
+    c11_html.write_text(deck.read_text(encoding="utf-8").replace("</body>", sc_clear_js + "</body>"), encoding="utf-8")
+    r_c11 = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", c11_html.as_uri()])
+    m_c11 = re.search(r'<pre id="c11">(.*?)</pre>', r_c11.stdout, re.S)
+    c11_o = json.loads(html.unescape(m_c11.group(1))) if m_c11 else {}
+    ok("player: #sc-clear clears transcript search and hashchange closes open modal",
+       c11_o.get("hiddenInit") and c11_o.get("shownQuery") and c11_o.get("cleared") and c11_o.get("closedOnHash") and not js_errors(r_c11.stderr),
+       (c11_o, js_errors(r_c11.stderr)[:2]))
+    squashed_svg = built(tmp, "squash-svg.html", HEAD + '<section class="slide"><h2 data-say="Chart.">Chart</h2><figure class="grow"><svg viewBox="0 0 800 300"><text x="400" y="150" font-size="30" transform="scale(1, 0.3)" fill="var(--fg)">Squashed</text></svg></figure></section>')
+    ok("rendered check: catches non-uniformly squashed SVG <text> below 22px",
+       any(i["type"] == "small-text" for i in check.inspect(squashed_svg)["issues"]))
+    themes_js = """<script>(function(){
+      const rows = () => [...document.querySelectorAll('.row')];
+      const vis = () => rows().filter(r => !r.hidden).length;
+      const nAll = vis();
+      document.querySelector('[data-filter="dark"]').click();
+      const nDark = vis();
+      document.querySelector('[data-filter="light"]').click();
+      const nLight = vis();
+      document.querySelector('[data-filter="all"]').click();
+      const nReset = vis();
+      const pre = document.createElement('pre'); pre.id = 'ttest';
+      pre.textContent = JSON.stringify({ nAll, nDark, nLight, nReset });
+      document.body.appendChild(pre);
+    })();</script>"""
+    themes_copy = tmp / "themes-test.html"
+    themes_copy.write_text((SKILL / "assets" / "themes.html").read_text(encoding="utf-8").replace("</body>", themes_js + "</body>"), encoding="utf-8")
+    r_thm = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,900", "--virtual-time-budget=2000", "--dump-dom", themes_copy.as_uri()])
+    m_thm = re.search(r'<pre id="ttest">(.*?)</pre>', r_thm.stdout, re.S)
+    thm_o = json.loads(html.unescape(m_thm.group(1))) if m_thm else {}
+    ok("themes.html: filter buttons switch between All (10), Dark (3), and Light (7) without JS errors",
+       thm_o == {"nAll": 10, "nDark": 3, "nLight": 7, "nReset": 10} and not js_errors(r_thm.stderr),
+       (thm_o, js_errors(r_thm.stderr)[:2]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
