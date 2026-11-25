@@ -1406,6 +1406,41 @@ def main():
     ok("player: clicking muted icon after no-voice fallback retries sound instead of muting",
        mo.get("offAfterNoVoice") and mo.get("triedUnmute") and not js_errors(r_m.stderr), (mo, js_errors(r_m.stderr)[:2]))
 
+    # Batch 17 regression tests (computed color visibility for .box > h3 .tag, .section elements, and img.bg cards)
+    ks_src = (
+        HEAD +
+        '<section class="slide section"><h2 data-say="Sec.">Sec</h2><p class="stat">99%</p><p class="note">Note</p>'
+        '<div class="card"><p><code>code</code></p></div></section>\n'
+        '<section class="slide"><h2 data-say="Box.">Box</h2><div class="box"><h3><span class="tag">Plain</span><span class="tag ok">OK</span> Title</h3><p>x</p></div></section>\n'
+    )
+    ks_deck = built(tmp, "ks-contrast.html", ks_src)
+    ks_js = """<script>(function(){
+      const s1 = document.querySelectorAll('#stage > section.slide')[0];
+      const s2 = document.querySelectorAll('#stage > section.slide')[1];
+      const cs = el => getComputedStyle(el);
+      const tag = s2.querySelector('.box > h3 .tag:not(.ok)');
+      const tagOk = s2.querySelector('.box > h3 .tag.ok');
+      const cardCode = s1.querySelector('.card code');
+      const card = s1.querySelector('.card');
+      const secStat = s1.querySelector('.stat');
+      const pre = document.createElement('pre'); pre.id = 'kstest';
+      pre.textContent = JSON.stringify({
+        tagFg: cs(tag).color, tagBg: cs(tag).backgroundColor,
+        tagOkFg: cs(tagOk).color,
+        codeFg: cs(cardCode).color, cardBg: cs(card).backgroundColor,
+        secStatFg: cs(secStat).color, secBg: cs(s1).backgroundColor
+      });
+      document.body.appendChild(pre);
+    })();</script>"""
+    ks_run = tmp / "ks-run.html"
+    ks_run.write_text(ks_deck.read_text(encoding="utf-8").replace("</body>", ks_js + "</body>"), encoding="utf-8")
+    r_ks = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", ks_run.as_uri() + "?still=1"])
+    m_ks = re.search(r'<pre id="kstest">(.*?)</pre>', r_ks.stdout, re.S)
+    ks_o = json.loads(html.unescape(m_ks.group(1))) if m_ks else {}
+    ok("CSS: .box > h3 plain .tag, .section .stat, and .section .card code have visible contrast",
+       ks_o.get("tagFg") != ks_o.get("tagBg") and ks_o.get("tagOkFg") != ks_o.get("tagFg")
+       and ks_o.get("codeFg") != ks_o.get("cardBg") and ks_o.get("secStatFg") != ks_o.get("secBg"), ks_o)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
