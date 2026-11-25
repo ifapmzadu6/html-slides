@@ -423,39 +423,53 @@ def main():
         return 2
     if a.json:
         bad = any(i.get("level", "error") == "error" for i in rep.get("issues", []))
-        out_rep = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in rep.items() if k != "browser"}
-        print(json.dumps(out_rep, ensure_ascii=False, indent=2))
     else:
         bad = report(rep)
-    log_out = sys.stderr if a.json else sys.stdout
+    artifacts = {}
+    export_err = None
     if a.shots:
         try:
             out, dense = shots(rep, a.shots)
+            artifacts["shots"] = str(out)
+            if not a.json:
+                print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (out, dense))
         except CheckError as e:
-            print("Screenshots could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        print("Screenshots: %s (slide-01.png ..., plus phone views mobile-portrait.png / mobile-landscape.png showing slide %d)" % (out, dense), file=log_out)
-    if a.pdf:
+            export_err = "Screenshots could not be saved: %s" % e
+    if not export_err and a.pdf:
         try:
             pdf_out = export_pdf(rep, a.pdf, notes=a.pdf_notes)
+            artifacts["pdf"] = str(pdf_out)
+            if not a.json:
+                print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if a.pdf_notes else ""))
         except CheckError as e:
-            print("PDF could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        print("PDF: %s%s" % (pdf_out, " (with speaker notes)" if a.pdf_notes else ""), file=log_out)
-    if a.script:
+            export_err = "PDF could not be saved: %s" % e
+    if not export_err and a.script:
         try:
             sc_out = export_script(rep, a.script)
+            artifacts["script"] = str(sc_out)
+            if not a.json:
+                print("Script: %s" % sc_out)
         except CheckError as e:
-            print("Script could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        print("Script: %s" % sc_out, file=log_out)
-    if a.vtt:
+            export_err = "Script could not be saved: %s" % e
+    if not export_err and a.vtt:
         try:
             vtt_out = export_vtt(rep, a.vtt)
+            artifacts["vtt"] = str(vtt_out)
+            if not a.json:
+                print("WebVTT: %s" % vtt_out)
         except CheckError as e:
-            print("WebVTT could not be saved: %s" % e, file=log_out)
-            return 1 if bad else 2
-        print("WebVTT: %s" % vtt_out, file=log_out)
+            export_err = "WebVTT could not be saved: %s" % e
+    if a.json:
+        out_rep = {k: (str(v) if isinstance(v, pathlib.Path) else v) for k, v in rep.items() if k != "browser"}
+        if artifacts:
+            out_rep["artifacts"] = artifacts
+        if export_err:
+            out_rep["error"] = export_err
+        print(json.dumps(out_rep, ensure_ascii=False, indent=2))
+    elif export_err:
+        print(export_err)
+    if export_err:
+        return 1 if bad else 2
     return 1 if bad else 0
 
 
