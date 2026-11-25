@@ -1711,6 +1711,33 @@ def main():
     ok("CSS: centered cite resets padding, dense cite matches dense blockquote, and #sc-count clears #sc-clear",
        bq_o.get("tcCitePad") == 0 and bq_o.get("denseCitePad") == bq_o.get("denseBqPad") and bq_o.get("gap", 0) >= 6, bq_o)
 
+    # Batch 26 regression tests (narrow mobile #btns fit at 360px/320px, sticky #ov-head close button on scrolled overview)
+    mob12_slides = "".join('<section class="slide"><h2 data-say="Slide %d.">Slide %d</h2></section>\n' % (k, k) for k in range(1, 13))
+    mob12_deck = built(tmp, "mob12.html", HEAD + mob12_slides)
+    mob12_js = """<script>(function(){
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      const vw = document.documentElement.clientWidth;
+      const btns = [...document.querySelectorAll('#btns button')].filter(b => getComputedStyle(b).display !== 'none');
+      const maxRight = Math.max(...btns.map(b => b.getBoundingClientRect().right));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+      const ovCloseRect = document.getElementById('ov-close').getBoundingClientRect();
+      parent.postMessage({ mobtest: { vw, maxRight, fits: maxRight <= vw + 1, ovCloseVisible: ovCloseRect.top >= 0 && ovCloseRect.bottom <= document.documentElement.clientHeight } }, '*');
+    })();</script>"""
+    mob12_run = tmp / "mob12-run.html"
+    mob12_run.write_text(mob12_deck.read_text(encoding="utf-8").replace("</body>", mob12_js + "</body>"), encoding="utf-8")
+    mob_ok = []
+    for mw, mh in ((360, 640), (320, 568)):
+        mwrap = tmp / ("wrap-%d.html" % mw)
+        mwrap.write_text('<!DOCTYPE html><body style="margin:0"><script>window.addEventListener("message",function(e){if(e.data&&e.data.mobtest){var o=document.createElement("pre");o.id="out";o.textContent=JSON.stringify(e.data.mobtest);document.body.appendChild(o);}});</script>'
+                         '<iframe src="%s?noanim=1&rate=0.75#10" style="border:0;width:%dpx;height:%dpx"></iframe>'
+                         % (mob12_run.as_uri(), mw, mh), encoding="utf-8")
+        r_mb = check.run(browser, ["--window-size=800,800", "--virtual-time-budget=3000", "--dump-dom", mwrap.as_uri()])
+        m_mb = re.search(r'<pre id="out">(.*?)</pre>', r_mb.stdout, re.S)
+        mb_o = json.loads(html.unescape(m_mb.group(1))) if m_mb else {}
+        mob_ok.append((mw, mb_o))
+    ok("mobile: #btns fit within 360px & 320px viewports at 0.75x/11-of-12 and sticky #ov-close stays visible",
+       all(o.get("fits") and o.get("ovCloseVisible") for _, o in mob_ok), mob_ok)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
