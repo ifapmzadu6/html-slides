@@ -1678,6 +1678,39 @@ def main():
     bd_j = json.loads(r_bd.stdout) if r_bd.returncode == 0 else {}
     ok("add_voice --info: ignores boolean values in durations", r_bd.returncode == 0 and "duration_sec" not in bd_j, bd_j)
 
+    # Batch 25 regression tests (1-line blockquote overflow fix, dense cite alignment, nested ol sizing, transcript #sc-count/#sc-clear spacing)
+    bq_src = (
+        HEAD +
+        '<section class="slide tc"><h2 data-say="Quote.">Quote</h2><blockquote>Simplicity is key.</blockquote><cite>Author</cite></section>\n'
+        '<section class="slide dense"><h2 data-say="Dense quote.">Dense</h2><blockquote>Short quote.</blockquote><cite>Author</cite><ol><li>One<ol><li>Sub</li></ol></li></ol></section>\n'
+    )
+    bq_deck = built(tmp, "bq-check.html", bq_src)
+    bq_rep = check.inspect(bq_deck)
+    ok("CSS: 1-line blockquote on standard and dense slides passes rendered check without false overflow",
+       not bq_rep["issues"], bq_rep["issues"])
+    bq_js = """<script>(function(){
+      const s = document.querySelectorAll('#stage > section.slide');
+      const cs = el => getComputedStyle(el);
+      const tcCitePad = parseFloat(cs(s[0].querySelector('cite')).paddingLeft);
+      const denseCitePad = parseFloat(cs(s[1].querySelector('cite')).paddingLeft);
+      const denseBqPad = parseFloat(cs(s[1].querySelector('blockquote')).paddingLeft);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+      const inp = document.getElementById('sc-search');
+      inp.value = 'Quote'; inp.dispatchEvent(new Event('input'));
+      const cntR = document.getElementById('sc-count').getBoundingClientRect().right;
+      const clrL = document.getElementById('sc-clear').getBoundingClientRect().left;
+      const pre = document.createElement('pre'); pre.id = 'bqtest';
+      pre.textContent = JSON.stringify({ tcCitePad, denseCitePad, denseBqPad, gap: clrL - cntR });
+      document.body.appendChild(pre);
+    })();</script>"""
+    bq_run = tmp / "bq-run.html"
+    bq_run.write_text(bq_deck.read_text(encoding="utf-8").replace("</body>", bq_js + "</body>"), encoding="utf-8")
+    r_bq = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", bq_run.as_uri() + "?noanim=1"])
+    m_bq = re.search(r'<pre id="bqtest">(.*?)</pre>', r_bq.stdout, re.S)
+    bq_o = json.loads(html.unescape(m_bq.group(1))) if m_bq else {}
+    ok("CSS: centered cite resets padding, dense cite matches dense blockquote, and #sc-count clears #sc-clear",
+       bq_o.get("tcCitePad") == 0 and bq_o.get("denseCitePad") == bq_o.get("denseBqPad") and bq_o.get("gap", 0) >= 6, bq_o)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
