@@ -531,10 +531,9 @@ class Lint(HTMLParser):
             if e["tag"] == "tr":
                 tbl = next((x for x in reversed(self.stack) if x["tag"] == "table"), None)
                 if tbl is not None and "gantt" in tbl["cls"]:
-                    in_head = any(x["tag"] == "thead" for x in self.stack[self.stack.index(tbl) + 1:])
-                    if in_head and tbl.get("gantt_head") is None and e.get("cells", 0) > 0:
+                    if tbl.get("gantt_head") is None and e.get("cells", 0) > 0:
                         tbl["gantt_head"] = e["cells"]
-                    elif not in_head and tbl.get("gantt_head") and e.get("cells", 0) != tbl["gantt_head"]:
+                    elif tbl.get("gantt_head") and e.get("cells", 0) != tbl["gantt_head"]:
                         self.add("error", "gantt-columns",
                                  "Gantt row has %d column(s) (counting colspan) but header has %d." % (e.get("cells", 0), tbl["gantt_head"]),
                                  "Make every row's cells (th + td colspans) add up to exactly %d columns." % tbl["gantt_head"],
