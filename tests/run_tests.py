@@ -1476,6 +1476,16 @@ def main():
        ks2_o.get("secTblBg") != "rgba(0, 0, 0, 0)" and ks2_o.get("secTblFg") != ks2_o.get("secTblBg")
        and ks2_o.get("flowCircleBg") != ks2_o.get("flowCardBg") and ks2_o.get("cardTblBg") == "rgba(0, 0, 0, 0)", ks2_o)
 
+    # Batch 19 regression tests (print .speaking scoped to cards/boxes/flow, case-insensitive ?theme=, thead-less gantt)
+    tpl_cur = (SKILL / "assets" / "template.html").read_text(encoding="utf-8")
+    ok("CSS: print .speaking reset scopes to card/box/flow without overriding h2/lead accent bars",
+       ".slide .card.speaking, .slide .box.speaking, .slide ol.flow > li.speaking" in tpl_cur and "\n  .slide .speaking {" not in tpl_cur)
+    r_ci_thm = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", deck.as_uri() + "?theme=DARK"])
+    ok("player: ?theme= URL parameter accepts uppercase theme names", 'data-theme="dark"' in r_ci_thm.stdout)
+    gantt_nothead = HEAD + '<section class="slide"><h2 data-say="G.">G</h2><table class="gantt"><tr><th>Task</th><th>M1</th><th>M2</th></tr><tr><th>A</th><td class="bar">A</td></tr></table></section>'
+    ok("build: catches gantt column mismatch even without <thead>",
+       any(i["type"] == "gantt-columns" for i in errors(build.lint(gantt_nothead)[3])))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
