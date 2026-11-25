@@ -1543,6 +1543,60 @@ def main():
        and b21_o.get("stat3Fg") == b21_o.get("badge3Bg")
        and b21_o.get("code3Fg") == b21_o.get("lead3Fg"), b21_o)
 
+    # Batch 22 regression tests (accessibility: start inert, controls focus-within, ARIA current/expanded, forced-colors, themes.html iframe tabindex)
+    a11y_js = """<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      const startInert = $('#stage').inert === true && $('#controls').inert === true && $('#start').inert === false;
+      const barCur1 = document.querySelectorAll('#bar button')[0].getAttribute('aria-current') === 'step';
+      $('#start-play').click();
+      await sleep(100);
+      const activeInert = $('#stage').inert === false && $('#controls').inert === false;
+      $('#b-cc').focus();
+      await sleep(3100);
+      const controlsStayedVisible = $('#player').classList.contains('ui') && parseFloat(getComputedStyle($('#controls')).opacity) > 0.9;
+      $('#b-cc').blur();
+      await sleep(3100);
+      const controlsAutoHid = !$('#player').classList.contains('ui');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+      const ovAria = $('#b-grid').getAttribute('aria-expanded') === 'true' && $('.ov-item.current').getAttribute('aria-current') === 'true';
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+      const scAria = $('#b-grid').getAttribute('aria-expanded') === 'false' && $('#b-script').getAttribute('aria-expanded') === 'true'
+        && $('.sc-line.cur').getAttribute('aria-current') === 'true' && $('#sc-count').getAttribute('aria-live') === 'polite';
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const scClosed = $('#b-script').getAttribute('aria-expanded') === 'false';
+      const pre = document.createElement('pre'); pre.id = 'a11ytest';
+      pre.textContent = JSON.stringify({ startInert, barCur1, activeInert, controlsStayedVisible, controlsAutoHid, ovAria, scAria, scClosed });
+      document.body.appendChild(pre);
+    })();</script>"""
+    a11y_html = tmp / "a11y-test.html"
+    a11y_html.write_text(deck.read_text(encoding="utf-8").replace("</body>", a11y_js + "</body>"), encoding="utf-8")
+    r_a11y = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=10000", "--dump-dom", a11y_html.as_uri() + "?mute=1&noanim=1"])
+    m_a11y = re.search(r'<pre id="a11ytest">(.*?)</pre>', r_a11y.stdout, re.S)
+    a11y_o = json.loads(html.unescape(m_a11y.group(1))) if m_a11y else {}
+    ok("a11y: start inert, controls focus-within retention, aria-current & aria-expanded sync",
+       a11y_o == {"startInert": True, "barCur1": True, "activeInert": True, "controlsStayedVisible": True, "controlsAutoHid": True, "ovAria": True, "scAria": True, "scClosed": True}
+       and not js_errors(r_a11y.stderr), (a11y_o, js_errors(r_a11y.stderr)[:2]))
+    ok("a11y: template includes forced-colors high-contrast rules",
+       "@media (forced-colors: active)" in (SKILL / "assets" / "template.html").read_text(encoding="utf-8"))
+    themes_a11y_js = """<script>(function(){
+      const iframes = [...document.querySelectorAll('.shot iframe')];
+      const allNonTab = iframes.length === 40 && iframes.every(f => f.tabIndex === -1 && f.getAttribute('aria-hidden') === 'true');
+      document.querySelector('[data-filter="dark"]').click();
+      const liveTxt = document.getElementById('live').textContent;
+      const pre = document.createElement('pre'); pre.id = 'ta11y';
+      pre.textContent = JSON.stringify({ allNonTab, liveTxt });
+      document.body.appendChild(pre);
+    })();</script>"""
+    ta11y_html = tmp / "themes-a11y.html"
+    ta11y_html.write_text((SKILL / "assets" / "themes.html").read_text(encoding="utf-8").replace("</body>", themes_a11y_js + "</body>"), encoding="utf-8")
+    r_ta = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,900", "--virtual-time-budget=2000", "--dump-dom", ta11y_html.as_uri()])
+    m_ta = re.search(r'<pre id="ta11y">(.*?)</pre>', r_ta.stdout, re.S)
+    ta_o = json.loads(html.unescape(m_ta.group(1))) if m_ta else {}
+    ok("themes.html a11y: preview iframes are excluded from Tab order and filter announces count",
+       ta_o.get("allNonTab") is True and "3 dark" in ta_o.get("liveTxt", ""), ta_o)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
