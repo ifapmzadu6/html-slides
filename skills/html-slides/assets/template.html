@@ -345,7 +345,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide figure img.cover { flex: 1 1 0; width: 100%; height: 100%; }
 .slide figure.grow svg { flex: 1 1 0; width: 100%; }
 .slide figcaption { flex: none; font-size: 24px; color: var(--muted); }
-.slide pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; background: #0f172a; color: #e2e8f0; padding: 24px 28px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, .25); box-shadow: 0 4px 16px rgba(0, 0, 0, .14); overflow: hidden; white-space: pre-wrap; }
+.slide pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; background: #0f172a; color: #e2e8f0; padding: 24px 28px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, .25); box-shadow: 0 4px 16px rgba(0, 0, 0, .14); overflow: hidden; white-space: pre-wrap; user-select: text; -webkit-user-select: text; cursor: text; }
 .slide code { font-family: var(--mono); }
 .slide :not(pre) > code { font-size: .9em; padding: .06em .32em; border-radius: .26em; background: var(--accent-soft); }
 .slide .voice { display: none !important; }
@@ -1095,6 +1095,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     barTip.style.left = Math.max(hw + 4, Math.min(br.width - hw - 4, cx)) + 'px';
   }
   function hideBarTip() { barTip.classList.remove('show'); }
+  if (slides.length > 20) bar.style.gap = slides.length > 40 ? '1px' : '2px';
   slides.forEach(function (s, i) {
     var b = document.createElement('button'); b.type = 'button'; b.style.flexGrow = Math.max(1, Math.round(slideDur[i] / 1000));
     var lbl = s.getAttribute('aria-label');
@@ -1384,7 +1385,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         cueIdx = Math.min(ci, T.length - 1);
         partIdx = Math.min(pi, T[cueIdx].parts.length - 1);
         mid = true;
+        var sl = slides[cur]; sl.classList.add('jump');
         T.forEach(function (c, k) { if (c.reveal) c.el.classList.toggle('pending', k > cueIdx); });
+        void sl.offsetWidth; sl.classList.remove('jump');
         T[cueIdx].el.classList.add('speaking');
         setCaption(T[cueIdx].parts[partIdx].cap);
       }
@@ -1536,6 +1539,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   var swiped = false, tx = 0, ty = 0, multi = false;
   stage.addEventListener('click', function (e) {
     if (swiped) { swiped = false; return; }
+    if (window.getSelection && String(window.getSelection()).trim()) return;
     if (e.target.closest('a,button,input,select,textarea,summary,label,video,audio,[data-noplay]')) return;
     toggle();
   });
@@ -1688,9 +1692,14 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
         var x0 = (r.left - sr.left) / sc, y0 = (r.top - sr.top) / sc, x1 = (r.right - sr.left) / sc, y1 = (r.bottom - sr.top) / sc;
         var over = x0 < -1 || y0 < -1 || x1 > W + 1 || y1 > H - CAPTION_BAND + 1;
         var clip = !el.ownerSVGElement && el.tagName.toLowerCase() !== 'svg' && el.clientWidth > 0 && (el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2);
-        if ((over || clip) && !bad.some(function (b) { return b.contains(el); })) {
+        var svgClip = false;
+        if (el.ownerSVGElement && el.tagName.toLowerCase() !== 'g' && !el.closest('[clip-path]') && getComputedStyle(el.ownerSVGElement).overflow !== 'visible') {
+          var vr = el.ownerSVGElement.getBoundingClientRect(), tol = 3 * sc;
+          svgClip = r.left < vr.left - tol || r.right > vr.right + tol || r.top < vr.top - tol || r.bottom > vr.bottom + tol;
+        }
+        if ((over || clip || svgClip) && !bad.some(function (b) { return b.contains(el); })) {
           bad.push(el);
-          add(i, 'overflow', desc(el) + (over ? ' extends outside the slide area (element: left ' + Math.round(x0) + ', top ' + Math.round(y0) + ', right ' + Math.round(x1) + ', bottom ' + Math.round(y1) + '; allowed: left 0, top 0, right ' + W + ', bottom ' + (H - CAPTION_BAND) + ')' : ' has content spilling out of its box (a long word or URL that cannot wrap, or not enough height)'));
+          add(i, 'overflow', desc(el) + (over ? ' extends outside the slide area (element: left ' + Math.round(x0) + ', top ' + Math.round(y0) + ', right ' + Math.round(x1) + ', bottom ' + Math.round(y1) + '; allowed: left 0, top 0, right ' + W + ', bottom ' + (H - CAPTION_BAND) + ')' : svgClip ? ' is clipped by its <svg> viewBox (widen viewBox or shorten/reposition the element)' : ' has content spilling out of its box (a long word or URL that cannot wrap, or not enough height)'));
         }
         var hasText = Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.trim(); });
         var fs = parseFloat(getComputedStyle(el).fontSize);

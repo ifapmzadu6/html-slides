@@ -1486,6 +1486,16 @@ def main():
     ok("build: catches gantt column mismatch even without <thead>",
        any(i["type"] == "gantt-columns" for i in errors(build.lint(gantt_nothead)[3])))
 
+    # Batch 20 regression tests (SVG viewBox clipping check, selectable <pre>, large-deck #bar gap)
+    svg_clip_deck = built(tmp, "svg-vb-clip.html", HEAD + '<section class="slide"><h2 data-say="Diagram.">Diagram</h2><figure class="grow"><svg viewBox="0 0 800 300" style="width:700px"><text x="650" y="160" font-size="36" fill="var(--fg)">はみ出す長いラベル文字列</text></svg></figure></section>')
+    ok("rendered check: catches SVG <text> clipped by its own viewBox",
+       any(i["type"] == "overflow" and "viewBox" in i["msg"] for i in check.inspect(svg_clip_deck)["issues"]))
+    svg_ok_deck = built(tmp, "svg-vb-ok.html", HEAD + '<section class="slide"><h2 data-say="Diagram.">Diagram</h2><figure class="grow"><svg viewBox="0 0 800 300"><rect x="40" y="90" width="240" height="120" rx="20" fill="var(--card)" stroke="var(--accent)" stroke-width="4"/><text x="160" y="162" text-anchor="middle" font-size="36" fill="var(--fg)">OK</text></svg></figure></section>')
+    ok("rendered check: valid inline SVG inside viewBox passes with zero issues",
+       not check.inspect(svg_ok_deck)["issues"])
+    ok("template: <pre> allows text selection so viewers can copy code snippets",
+       "user-select: text" in (SKILL / "assets" / "template.html").read_text(encoding="utf-8"))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
