@@ -243,13 +243,21 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.title .sub, .slide.end .sub { font-size: 36px; color: var(--muted); }
 .slide.section { justify-content: center; gap: 20px; background: var(--section-bg); background: linear-gradient(135deg, var(--section-bg), color-mix(in srgb, var(--section-bg) 82%, #000)); color: var(--section-fg); }
 .slide.section h2 { font-size: 72px; border: 0; padding: 0; }
-.slide.section .kicker, .slide.section .sub { color: var(--section-fg); opacity: .85; }
+.slide.section .kicker, .slide.section .sub, .slide.section .note, .slide.section .source, .slide.section figcaption { color: var(--section-fg); opacity: .85; }
 .slide.section .sub { font-size: 34px; }
 .slide.section strong { color: var(--section-fg); text-decoration: underline; text-decoration-color: var(--accent-2); text-underline-offset: .15em; }
 .slide.section a { color: var(--section-fg); }
+.slide.section .stat, .slide.section blockquote::before { color: var(--section-fg); }
+.slide.section ul > li::before { background: var(--section-fg); }
+.slide.section ol > li::before { background: var(--section-fg); color: var(--section-bg); }
 .slide.section .badge { background: var(--section-fg); color: var(--section-bg); }
 .slide.section :not(pre) > code { background: rgba(255,255,255,.18); color: var(--section-fg); }
 .slide.section .card, .slide.section .box, .slide.section ol.flow > li, .slide.section .lead { color: var(--fg); }
+.slide.section .card .note, .slide.section .box .note { color: var(--muted); opacity: 1; }
+.slide.section .card .stat, .slide.section .box .stat { color: var(--accent); }
+.slide.section .card ul > li::before, .slide.section .box ul > li::before { background: var(--accent); }
+.slide.section .card ol > li::before, .slide.section .box ol > li::before { background: var(--accent); color: var(--on-accent); }
+.slide.section .card :not(pre) > code, .slide.section .box :not(pre) > code, .slide.section .lead :not(pre) > code { background: var(--accent-soft); color: inherit; }
 .slide.section .card strong, .slide.section .box strong, .slide.section .lead strong { color: var(--accent); text-decoration: none; }
 .slide.section .card a, .slide.section .box a, .slide.section .lead a { color: var(--accent); }
 
@@ -295,8 +303,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:has(> img.bg)::before { content: ""; position: absolute; inset: 0; width: auto; height: auto; right: 0; top: 0; border-radius: 0; background: linear-gradient(135deg, rgba(8,12,22,.76), rgba(8,12,22,.46)); opacity: 1; z-index: 1; display: block; pointer-events: none; }
 .slide:has(> img.bg)::after { display: none; }
 .slide:has(> img.bg) { color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
-.slide:has(> img.bg) .sub, .slide:has(> img.bg) .note, .slide:has(> img.bg) .slide-footer, .slide:has(> img.bg) figcaption { color: rgba(255,255,255,.85); }
-.slide:has(> img.bg) .kicker, .slide:has(> img.bg) strong, .slide:has(> img.bg) a { color: var(--accent-2); }
+.slide:has(> img.bg) .sub, .slide:has(> img.bg) .note, .slide:has(> img.bg) .source, .slide:has(> img.bg) .slide-footer, .slide:has(> img.bg) figcaption { color: rgba(255,255,255,.85); }
+.slide:has(> img.bg) .kicker, .slide:has(> img.bg) strong, .slide:has(> img.bg) a, .slide:has(> img.bg) .stat { color: var(--accent-2); }
+.slide:has(> img.bg) .badge { background: var(--accent-2); color: #1c2333; text-shadow: none; }
 .slide:has(> img.bg) h2 { border-left-color: var(--accent-2); }
 .slide:has(> img.bg) ul > li::before { background: var(--accent-2); }
 .slide:has(> img.bg) ol > li::before { background: var(--accent-2); color: #111; }
@@ -309,9 +318,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:has(> img.bg) .card ol > li::before, .slide:has(> img.bg) .box ol > li::before { background: var(--accent); color: var(--on-accent); }
 .slide:has(> img.bg) pre { text-shadow: none; }
 .slide:has(> img.bg) .card .note, .slide:has(> img.bg) .box .note { color: var(--muted); }
+.slide:has(> img.bg) .card .stat, .slide:has(> img.bg) .box .stat,
 .slide:has(> img.bg) .card strong, .slide:has(> img.bg) .box strong, .slide:has(> img.bg) .lead strong,
 .slide:has(> img.bg) .card a, .slide:has(> img.bg) .box a, .slide:has(> img.bg) .lead a { color: var(--accent); }
+.slide:has(> img.bg) .card .badge, .slide:has(> img.bg) .box .badge { background: var(--accent); color: var(--on-accent); }
 .slide:has(> img.bg) :not(pre) > code { background: rgba(255,255,255,.18); color: #fff; }
+.slide:has(> img.bg) .card :not(pre) > code, .slide:has(> img.bg) .box :not(pre) > code, .slide:has(> img.bg) .lead :not(pre) > code { background: var(--accent-soft); color: inherit; }
 .slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; overflow: hidden; }
 .slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; flex: 0 1 auto; object-fit: contain; border-radius: min(14px, var(--radius)); }
 .slide figure:has(figcaption) img, .slide figure:has(figcaption) svg { max-height: calc(100% - 48px); }
@@ -332,7 +344,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide .box { display: flex; flex-direction: column; border: var(--border-w) solid var(--line); border-radius: min(14px, var(--radius)); background: var(--bg); font-size: 26px; line-height: 1.45; box-shadow: var(--shadow); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1), border-color .3s, box-shadow .3s; }
 .slide .box.speaking { border-color: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
 .slide .box > h3 { font-size: 26px; padding: 8px 18px; background: var(--accent); color: var(--on-accent); border-radius: calc(min(14px, var(--radius)) - var(--border-w)) calc(min(14px, var(--radius)) - var(--border-w)) 0 0; }
-.slide .box > h3 .tag { background: var(--bg); border-color: transparent; margin-right: .25em; }
+.slide .box > h3 .tag { color: var(--fg); background: var(--bg); border-color: transparent; margin-right: .25em; }
+.slide .box > h3 .tag.ok { color: var(--ok); } .slide .box > h3 .tag.warn { color: var(--warn); } .slide .box > h3 .tag.ng { color: var(--ng); }
 .slide .box > h3 ~ * { margin: 12px 18px 14px; }
 .slide .box ul, .slide .box ol, .slide .card ul, .slide .card ol { font-size: inherit; gap: 8px; }
 .slide .cols.arrows { gap: 60px; }
