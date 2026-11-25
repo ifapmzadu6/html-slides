@@ -1848,6 +1848,45 @@ def main():
     ok("check.py --json: includes structured error field when export fails",
        r_cj_err.returncode == 2 and "PDF could not be saved" in cj_err.get("error", ""), cj_err)
 
+    # Batch 29 regression tests (gantt first-col header alignment, pre --radius on mono, padding-box card clip, @page notes pagination)
+    b29_src = (
+        '<!--\ntitle: Print & Gantt Polish\ntheme: mono\nlang: ja\n-->\n'
+        '<section class="slide dense"><h2 data-say="工程表を確認します。">工程表</h2>'
+        '<div class="cols"><div class="box"><h3>スケジュール</h3>'
+        '<table class="gantt"><thead><tr><th>作業</th><th>4月</th><th>5月</th></tr></thead>'
+        '<tbody><tr><th>設計</th><td class="bar" colspan="2">要件</td></tr></tbody></table></div>'
+        '<div class="box"><h3>コード</h3><pre><code>echo ok</code></pre></div></div></section>\n'
+        '<section class="slide section"><h2 data-say="フローを確認します。">フロー</h2>'
+        '<ol class="flow"><li><strong>Step 1</strong></li><li><strong>Step 2</strong></li></ol></section>\n'
+    )
+    b29_deck = built(tmp, "b29-polish.html", b29_src)
+    b29_js = """<script>(function(){
+      const cs = el => getComputedStyle(el);
+      const gHead = document.querySelector('table.gantt thead th:first-child');
+      const gBody = document.querySelector('table.gantt tbody th');
+      const preEl = document.querySelector('.slide pre');
+      const flowLi = document.querySelector('ol.flow > li');
+      const boxEl = document.querySelector('.slide .box');
+      const pre = document.createElement('pre'); pre.id = 'b29';
+      pre.textContent = JSON.stringify({
+        ganttPadMatch: cs(gHead).paddingLeft === cs(gBody).paddingLeft && parseFloat(cs(gHead).paddingLeft) >= 10,
+        preZeroRadius: cs(preEl).borderTopLeftRadius === '0px',
+        flowClip: cs(flowLi).backgroundClip === 'padding-box',
+        boxClip: cs(boxEl).backgroundClip === 'padding-box'
+      });
+      document.body.appendChild(pre);
+    })();</script>"""
+    b29_run = tmp / "b29-run.html"
+    b29_run.write_text(b29_deck.read_text(encoding="utf-8").replace("</body>", b29_js + "</body>"), encoding="utf-8")
+    r_b29 = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", b29_run.as_uri() + "?still=1"])
+    m_b29 = re.search(r'<pre id="b29">(.*?)</pre>', r_b29.stdout, re.S)
+    b29_o = json.loads(html.unescape(m_b29.group(1))) if m_b29 else {}
+    ok("CSS: gantt first-col padding matches body, pre respects --radius on mono, cards clip to padding-box",
+       b29_o == {"ganttPadMatch": True, "preZeroRadius": True, "flowClip": True, "boxClip": True}, b29_o)
+    tpl_txt = (SKILL / "assets" / "template.html").read_text(encoding="utf-8")
+    ok("CSS: print speaker notes use named @page notes for multi-page margins",
+       "@page notes" in tpl_txt and "page: notes;" in tpl_txt)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
