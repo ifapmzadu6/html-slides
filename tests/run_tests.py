@@ -1645,6 +1645,39 @@ def main():
     build.extract(ef_deck, ef_src)
     ok("build: extract round-trips empty footer (page numbers only)", build.lint(ef_src.read_text(encoding="utf-8"))[0]["footer"] == "")
 
+    # Batch 24 regression tests (add_voice Japanese currency/sign normalization, qwen3 speaker validation, empty deck guard, --info boolean guard)
+    for phrase, spoken in (
+        ("営業利益は+1,200万円です。", "営業利益はプラス千二百万円です。"),
+        ("利益は-500万円でした。", "利益はマイナス五百万円でした。"),
+        ("差額は-¥1,200です。", "差額はマイナス千二百円です。"),
+        ("予算は¥120万です。", "予算は百二十万円です。"),
+        ("予算は￥1,200万円です。", "予算は千二百万円です。"),
+        ("月額¥0から始められます。", "月額0円から始められます。"),
+        ("予算は12,000万円です。", "予算は一億二千万円です。"),
+        ("予算は1億500円です。", "予算は一億五百円です。"),
+        ("範囲は100円-500円です。", "範囲は百円-五百円です。"),
+    ):
+        ok("add_voice: currency/sign normalization for " + phrase, add_voice._prep_qwen3_text(phrase) == spoken, add_voice._prep_qwen3_text(phrase))
+    with patch.object(add_voice.platform, "system", return_value="Darwin"), \
+         patch.object(add_voice, "qwen3_available", return_value=True), \
+         patch.object(sys, "argv", ["add_voice.py", str(ea_deck), "--engine", "qwen3", "--speaker", "ono_anna"]):
+        ok("add_voice: --engine qwen3 validates --speaker for default CustomVoice model", add_voice.main() == 2)
+    empty_narr_deck = built(tmp, "empty-narr.html", HEAD + '<section class="slide title"></section>')
+    with patch.object(add_voice.platform, "system", return_value="Darwin"), \
+         patch.object(add_voice, "qwen3_available", return_value=True), \
+         patch.object(sys, "argv", ["add_voice.py", str(empty_narr_deck), "--engine", "qwen3"]):
+        ok("add_voice: refuses to embed empty voice block on 0-sentence deck",
+           add_voice.main() == 2 and not add_voice.BLOCK.search(empty_narr_deck.read_text(encoding="utf-8")))
+    bool_dur_deck = tmp / "bool-dur.html"
+    build.assemble(meta, "", COVER, bool_dur_deck)
+    add_voice.save_voice_data(bool_dur_deck, bool_dur_deck.read_text(encoding="utf-8"), {
+        "voice": "test", "label": "Test", "speed": 1.0,
+        "clips": {"Hello.": ea_wav}, "durations": {"Hello.": True},
+    })
+    r_bd = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(bool_dur_deck), "--info", "--json"], capture_output=True, text=True)
+    bd_j = json.loads(r_bd.stdout) if r_bd.returncode == 0 else {}
+    ok("add_voice --info: ignores boolean values in durations", r_bd.returncode == 0 and "duration_sec" not in bd_j, bd_j)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:

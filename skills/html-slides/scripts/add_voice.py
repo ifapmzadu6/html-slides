@@ -389,12 +389,14 @@ def _prep_qwen3_text(s, lang="japanese"):
     s = re.sub(r"[、,]+\s*$", "", s.strip())
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d)[,，](?=\d{3}(?!\d))", "", s)
-    # Convert yen-prefixed amounts (e.g. ¥1200, ￥120000) to suffix 円 so place-value currency rules normalize them.
-    s = re.sub(r"[¥￥]([1-9１-９][0-9０-９]{0,11})(?![0-9０-９.．円万億])", r"\1円", s)
+    # Normalize yen-prefixed amounts (¥0, ¥1200, ¥120万, ￥1200万円) to suffix 円 so place-value currency rules normalize them.
+    s = re.sub(r"[¥￥]([0-9０-９]+(?:[.．][0-9０-９]+)?(?:万|億)?円)", r"\1", s)
+    s = re.sub(r"[¥￥]([0-9０-９]+(?:[.．][0-9０-９]+)?(?:万|億))(?![0-9０-９.．円])", r"\1円", s)
+    s = re.sub(r"[¥￥]([0-9０-９]{1,12})(?![0-9０-９.．円万億])", r"\1円", s)
     # Expand the sign before decimal conversion can replace the leading zero.
-    # Limit hyphen interpretation to measured quantities, keeping dates and IDs intact.
+    # Limit hyphen interpretation to measured quantities and currency amounts, keeping dates, ranges, and IDs intact.
     signs = {"-": "マイナス", "－": "マイナス", "−": "マイナス", "+": "プラス", "＋": "プラス", "±": "プラスマイナス"}
-    s = re.sub(r"(?<![\dA-Za-zＡ-Ｚａ-ｚ_%％℃])(?<!\d度)([-－−+＋±])(?=[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*[%％℃度])",
+    s = re.sub(r"(?<![\dA-Za-zＡ-Ｚａ-ｚ_%％℃])(?<!\d度)(?<!円)([-－−+＋±])(?=[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*(?:[%％℃度]|(?:万|億)?円))",
                lambda m: signs[m[1]], s)
     # Read each fractional digit, including zeros, even in a numeric-only cue.
     s = re.sub(r"(?<![A-Za-z_\d.．])([0-9０-９]+)[.．]([0-9０-９]+)(?![A-Za-z_\d]|[.．]\d)(日)?",
@@ -402,19 +404,25 @@ def _prep_qwen3_text(s, lang="japanese"):
     # Always expand measurement symbols in Japanese narration, even for numeric-only cues like "25%" or "30℃".
     s = s.replace("±", "プラスマイナス").replace("%", "パーセント").replace("％", "パーセント").replace("℃", "度")
     if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", s):
+        # Expand leading +/＋ before currency conversion turns digits into kanji.
+        s = re.sub(r"(?<![A-Za-zＡ-Ｚａ-ｚ_\d])[+＋](?=[0-9０-９])", "プラス", s)
         # A labeled identifier is a sequence of digits, including leading zeros.
         s = re.sub(r"(番号(?:は|が|：|:)?[ \t]*)([0-9０-９]+)(?![\dA-Za-z_.-])",
                    lambda m: m[1] + "、".join(JA_DIGITS[int(d)] for d in m[2]), s)
+        # Convert 5-8 digit 万円 amounts (e.g. 12000万円 -> 一億二千万円) cleanly into 億/万円.
+        def _ja_man_yen(m):
+            oku, man = divmod(int(m.group(1)), 10_000)
+            return _ja_currency_group(oku) + "億" + (_ja_currency_group(man) + "万" if man else "") + "円"
+        s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{4,7})万円", _ja_man_yen, s)
         # Only quantities with explicit units should acquire 万 or 億.
         s = re.sub(r"(?<![A-Za-z_\d.．])[1-9１-９]\d{4,11}(?=円|人|件|個|台|回|枚|冊|本|社|票|株|点|秒)",
                    _ja_num_units, s)
-        # Convert 1-4 digit numbers before 円, 万円, 億円, or 億...万円 (e.g. 3000円 -> 三千円, 1億2000万円 -> 一億二千万円) to explicit place-value kanji.
-        s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{0,3})(?=(?:億(?:[0-9０-９一二三四五六七八九十百千]+万)?|万)?円)",
+        # Convert 1-4 digit numbers before 円, 万円, 億円, or 億...円 (e.g. 3000円 -> 三千円, 1億2000万円 -> 一億二千万円) to explicit place-value kanji.
+        s = re.sub(r"(?<![A-Za-z_\d.．])([1-9１-９][0-9０-９]{0,3})(?=(?:億(?:[0-9０-９一二三四五六七八九十百千]+万?)?|万)?円)",
                    lambda m: _ja_currency_group(int(m.group(1))), s)
         # Preserve the existing kanji decimal notation (e.g. 六・八万円).
         s = re.sub(r"([一二三四五六七八九十百千〇零])・([一二三四五六七八九〇零])", r"\1てん\2", s)
         s = re.sub(r"てん([〇零一二三四五六七八九0-9０-９])日", r"てん\1にち", s)
-        s = re.sub(r"(?<![A-Za-zＡ-Ｚａ-ｚ_\d])[+＋](?=[0-9０-９])", "プラス", s)
         for k, v in QWEN3_KANJI_FIXES:
             s = s.replace(k, v)
         tagger = _get_tagger()
@@ -653,6 +661,8 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
                 cuts.append(_min_energy_cut(samples_list, sr, spans[k][1], spans[k + 1][0]))
             batch_out = {}
             for k, s in enumerate(batch):
+                if s not in wanted:
+                    continue
                 # Window around each sentence's aligned [start - 45ms, end + 450ms] bounded by neighbour cuts
                 # so inter-sentence breaths in the \n gap are discarded while trailing devoiced 'す/ます/です' is kept intact.
                 i0 = max(cuts[k], int((spans[k][0] - 0.045) * sr))
@@ -888,7 +898,8 @@ def main():
                 hdr = uri.partition(";")[0]
                 hdr = (hdr[5:] if hdr.startswith("data:") else hdr) or "unknown"
                 formats[hdr] = formats.get(hdr, 0) + 1
-        tot_sec = round(sum(v for v in durs.values() if isinstance(v, (int, float)) and math.isfinite(v) and v > 0), 2) if durs else None
+        valid_durs = [v for v in durs.values() if not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v) and v > 0]
+        tot_sec = round(sum(valid_durs), 2) if valid_durs else None
         if a.json:
             payload = {
                 "deck": deck.name,
@@ -903,15 +914,15 @@ def main():
             }
             if tot_sec is not None:
                 payload["duration_sec"] = tot_sec
-                payload["timed_clips"] = len(durs)
+                payload["timed_clips"] = len(valid_durs)
             print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
         fmt_str = ", ".join("%s (%d)" % (k, v) for k, v in sorted(formats.items()))
         print("Deck: %s (%.2f MB total, ~%.2f MB audio data)" % (deck.name, deck.stat().st_size / 1e6, total_b64 / 1e6))
         print("Voice: %s (%s), speed: %s" % (old.get("label") or "unknown", old.get("voice") or "unknown", old.get("speed", "unknown")))
         print("Clips: %d [%s]" % (len(clips), fmt_str))
-        if durs:
-            print("Duration: %.1f s across %d timed clip(s)" % (tot_sec, len(durs)))
+        if valid_durs:
+            print("Duration: %.1f s across %d timed clip(s)" % (tot_sec, len(valid_durs)))
         return 0
     if a.dry_run:
         texts, err_msg = read_deck_texts()
@@ -953,7 +964,7 @@ def main():
         except OSError as e:
             print("ERROR: could not remove the embedded audio: %s" % e)
             return 2
-        print("Embedded audio removed.")
+        print("Embedded audio removed." if m else "No embedded audio to remove.")
         return 0
 
     if a.trim_clip:
@@ -1065,6 +1076,9 @@ def main():
                 print("  %-15s %s" % (vid, desc))
             return 0
         label = a.speaker or QWEN3_DEFAULT_VOICE
+        if a.speaker and a.model in (QWEN3_DEFAULT_MODEL, "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice") and a.speaker not in QWEN3_VOICE_LANGS:
+            print("ERROR: there is no voice %s. Check with --list." % a.speaker)
+            return 2
         head = DeckHead()
         head.feed(src.partition("<!-- SLIDES:START")[0])
         head.close()
@@ -1113,6 +1127,9 @@ def main():
     texts, err_msg = read_deck_texts()
     if err_msg:
         print(err_msg)
+        return 2
+    if not texts:
+        print("No narration sentences found in %s. The HTML was not changed." % deck.name)
         return 2
 
     reuse = old["clips"] if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("clips"), dict) else {}
