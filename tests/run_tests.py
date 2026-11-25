@@ -1496,6 +1496,53 @@ def main():
     ok("template: <pre> allows text selection so viewers can copy code snippets",
        "user-select: text" in (SKILL / "assets" / "template.html").read_text(encoding="utf-8"))
 
+    # Batch 21 regression tests (table inside .box width, .section flow strong/lead code/badge, img.bg lead stat/badge/code)
+    b21_src = (
+        '<!--\ntitle: Box & Surface Audit\ntheme: pop\nlang: en\n-->\n'
+        '<section class="slide dense"><h2 data-say="Box table.">Box Table</h2>'
+        '<div class="box"><h3>Matrix</h3><table class="matrix"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table></div></section>\n'
+        '<section class="slide section"><h2 data-say="Section.">Section</h2>'
+        '<p class="lead">Run <code>build()</code> <span class="badge">NEW</span></p>'
+        '<ol class="flow"><li><strong>Step 1</strong><p>Detail</p></li><li><strong>Step 2</strong><p>Detail</p></li></ol></section>\n'
+        '<section class="slide"><img class="bg" alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">'
+        '<h2 data-say="Bg.">Bg</h2><p class="lead">Gain <span class="stat">+42%</span> <span class="badge">LIVE</span> <code>api()</code></p></section>\n'
+    )
+    b21_deck = built(tmp, "b21-surfaces.html", b21_src)
+    b21_rep = check.inspect(b21_deck)
+    ok("CSS: table inside .box > h3 does not overflow .box right border",
+       not [i for i in b21_rep["issues"] if i["slide"] == 1 and i["type"] == "overflow"], b21_rep["issues"])
+    b21_js = """<script>(function(){
+      const slides = document.querySelectorAll('#stage > section.slide');
+      const cs = el => getComputedStyle(el);
+      const box = slides[0].querySelector('.box'), tbl = slides[0].querySelector('.box table');
+      const s2 = slides[1], s3 = slides[2];
+      const flowLi = s2.querySelector('ol.flow > li'), flowStrong = flowLi.querySelector('strong');
+      const lead2 = s2.querySelector('.lead'), code2 = lead2.querySelector('code'), badge2 = lead2.querySelector('.badge');
+      const lead3 = s3.querySelector('.lead'), stat3 = lead3.querySelector('.stat'), badge3 = lead3.querySelector('.badge'), code3 = lead3.querySelector('code');
+      const pre = document.createElement('pre'); pre.id = 'b21';
+      pre.textContent = JSON.stringify({
+        tblFitsBox: tbl.getBoundingClientRect().right <= box.getBoundingClientRect().right - 1,
+        flowStrongFg: cs(flowStrong).color, flowCardBg: cs(flowLi).backgroundColor,
+        code2Fg: cs(code2).color, secFg: cs(s2).color,
+        badge2Bg: cs(badge2).backgroundColor, badge2Fg: cs(badge2).color,
+        stat3Fg: cs(stat3).color, lead3Fg: cs(lead3).color,
+        badge3Bg: cs(badge3).backgroundColor, code3Fg: cs(code3).color
+      });
+      document.body.appendChild(pre);
+    })();</script>"""
+    b21_run = tmp / "b21-run.html"
+    b21_run.write_text(b21_deck.read_text(encoding="utf-8").replace("</body>", b21_js + "</body>"), encoding="utf-8")
+    r_b21 = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", b21_run.as_uri() + "?still=1"])
+    m_b21 = re.search(r'<pre id="b21">(.*?)</pre>', r_b21.stdout, re.S)
+    b21_o = json.loads(html.unescape(m_b21.group(1))) if m_b21 else {}
+    ok("CSS: .section flow strong/lead code/badge and img.bg lead stat/badge/code stay legible",
+       b21_o.get("tblFitsBox")
+       and b21_o.get("flowStrongFg") != b21_o.get("flowCardBg")
+       and b21_o.get("code2Fg") != b21_o.get("secFg")
+       and b21_o.get("badge2Bg") != b21_o.get("secFg")
+       and b21_o.get("stat3Fg") == b21_o.get("badge3Bg")
+       and b21_o.get("code3Fg") == b21_o.get("lead3Fg"), b21_o)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:

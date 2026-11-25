@@ -248,6 +248,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.section strong { color: var(--section-fg); text-decoration: underline; text-decoration-color: var(--accent-2); text-underline-offset: .15em; }
 .slide.section a { color: var(--section-fg); }
 .slide.section .stat, .slide.section blockquote::before { color: var(--section-fg); }
+.slide.section .ok { color: #86efac; } .slide.section .warn { color: #fde047; } .slide.section .ng { color: #fca5a5; }
 .slide.section ul > li::before { background: var(--section-fg); }
 .slide.section ol > li::before { background: var(--section-fg); color: var(--section-bg); }
 .slide.section ol.flow > li::before { background: var(--accent); color: var(--on-accent); }
@@ -256,14 +257,20 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide.section .card table, .slide.section .box table { background: transparent; border-radius: 0; overflow: visible; }
 .slide.section .badge { background: var(--section-fg); color: var(--section-bg); }
 .slide.section :not(pre) > code { background: rgba(255,255,255,.18); color: var(--section-fg); }
-.slide.section .card, .slide.section .box, .slide.section ol.flow > li, .slide.section .lead { color: var(--fg); }
-.slide.section .card .note, .slide.section .box .note { color: var(--muted); opacity: 1; }
-.slide.section .card .stat, .slide.section .box .stat { color: var(--accent); }
-.slide.section .card ul > li::before, .slide.section .box ul > li::before { background: var(--accent); }
-.slide.section .card ol > li::before, .slide.section .box ol > li::before { background: var(--accent); color: var(--on-accent); }
-.slide.section .card :not(pre) > code, .slide.section .box :not(pre) > code, .slide.section .lead :not(pre) > code { background: var(--accent-soft); color: inherit; }
-.slide.section .card strong, .slide.section .box strong, .slide.section .lead strong { color: var(--accent); text-decoration: none; }
-.slide.section .card a, .slide.section .box a, .slide.section .lead a { color: var(--accent); }
+.slide.section :is(.card, .box, ol.flow > li, .lead) { color: var(--fg); }
+.slide.section :is(.card, .box, ol.flow > li, .lead) :is(.note, figcaption) { color: var(--muted); opacity: 1; }
+.slide.section :is(.card, .box, ol.flow > li, .lead) .stat { color: var(--accent); }
+.slide.section :is(.card, .box, ol.flow > li, .lead) .badge { background: var(--accent); color: var(--on-accent); }
+.slide.section :is(.card, .box, ol.flow > li, .lead, table) .ok { color: var(--ok); }
+.slide.section :is(.card, .box, ol.flow > li, .lead, table) .warn { color: var(--warn); }
+.slide.section :is(.card, .box, ol.flow > li, .lead, table) .ng { color: var(--ng); }
+.slide.section :is(.card, .box, ol.flow > li) blockquote::before { color: var(--accent); opacity: .32; }
+.slide.section :is(.card, .box) ul > li::before { background: var(--accent); }
+.slide.section :is(.card, .box) ol > li::before { background: var(--accent); color: var(--on-accent); }
+.slide.section :is(.card, .box, ol.flow > li) > code, .slide.section :is(.card, .box, ol.flow > li) :not(pre) > code { background: var(--accent-soft); color: inherit; }
+.slide.section .lead > code, .slide.section .lead :not(pre) > code { background: color-mix(in srgb, var(--bg) 75%, transparent); color: inherit; }
+.slide.section :is(.card, .box, ol.flow > li, .lead) strong { color: var(--accent); text-decoration: none; }
+.slide.section :is(.card, .box, ol.flow > li, .lead) a { color: var(--accent); }
 
 /* columns and cards */
 .slide .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 32px; align-items: stretch; min-height: 0; }
@@ -321,24 +328,24 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:has(> img.bg) tbody tr:nth-child(even) > * { background-color: rgba(255,255,255,.08); }
 .slide:has(> img.bg) tbody tr.speaking > * { background-color: rgba(255,255,255,.22) !important; }
 .slide:has(> img.bg) tr.total > * { border-top-color: rgba(255,255,255,.75); }
-.slide:has(> img.bg) .card, .slide:has(> img.bg) .box, .slide:has(> img.bg) ol.flow > li, .slide:has(> img.bg) .lead { color: var(--fg); text-shadow: none; }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) { color: var(--fg); text-shadow: none; }
 .slide:has(> img.bg) .card table, .slide:has(> img.bg) .box table { background: transparent; border-radius: 0; overflow: visible; }
 .slide:has(> img.bg) .card tbody tr:nth-child(even) > *, .slide:has(> img.bg) .box tbody tr:nth-child(even) > * { background-color: color-mix(in srgb, var(--card) 55%, transparent); }
 .slide:has(> img.bg) .card tbody tr.speaking > *, .slide:has(> img.bg) .box tbody tr.speaking > * { background-color: var(--accent-soft) !important; }
 .slide:has(> img.bg) .card tr.total > *, .slide:has(> img.bg) .box tr.total > * { border-top-color: var(--fg); }
-.slide:has(> img.bg) .card .ok, .slide:has(> img.bg) .box .ok, .slide:has(> img.bg) .lead .ok { color: var(--ok); }
-.slide:has(> img.bg) .card .warn, .slide:has(> img.bg) .box .warn, .slide:has(> img.bg) .lead .warn { color: var(--warn); }
-.slide:has(> img.bg) .card .ng, .slide:has(> img.bg) .box .ng, .slide:has(> img.bg) .lead .ng { color: var(--ng); }
-.slide:has(> img.bg) .card ul > li::before, .slide:has(> img.bg) .box ul > li::before { background: var(--accent); }
-.slide:has(> img.bg) .card ol > li::before, .slide:has(> img.bg) .box ol > li::before { background: var(--accent); color: var(--on-accent); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) .ok { color: var(--ok); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) .warn { color: var(--warn); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) .ng { color: var(--ng); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li) blockquote::before { color: var(--accent); opacity: .32; }
+.slide:has(> img.bg) :is(.card, .box) ul > li::before { background: var(--accent); }
+.slide:has(> img.bg) :is(.card, .box) ol > li::before { background: var(--accent); color: var(--on-accent); }
 .slide:has(> img.bg) pre { text-shadow: none; }
-.slide:has(> img.bg) .card .note, .slide:has(> img.bg) .box .note { color: var(--muted); }
-.slide:has(> img.bg) .card .stat, .slide:has(> img.bg) .box .stat,
-.slide:has(> img.bg) .card strong, .slide:has(> img.bg) .box strong, .slide:has(> img.bg) .lead strong,
-.slide:has(> img.bg) .card a, .slide:has(> img.bg) .box a, .slide:has(> img.bg) .lead a { color: var(--accent); }
-.slide:has(> img.bg) .card .badge, .slide:has(> img.bg) .box .badge { background: var(--accent); color: var(--on-accent); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) :is(.note, figcaption) { color: var(--muted); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) :is(.stat, strong, a) { color: var(--accent); }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li, .lead) .badge { background: var(--accent); color: var(--on-accent); }
 .slide:has(> img.bg) :not(pre) > code { background: rgba(255,255,255,.18); color: #fff; }
-.slide:has(> img.bg) .card :not(pre) > code, .slide:has(> img.bg) .box :not(pre) > code, .slide:has(> img.bg) .lead :not(pre) > code { background: var(--accent-soft); color: inherit; }
+.slide:has(> img.bg) :is(.card, .box, ol.flow > li) > code, .slide:has(> img.bg) :is(.card, .box, ol.flow > li) :not(pre) > code { background: var(--accent-soft); color: inherit; }
+.slide:has(> img.bg) .lead > code, .slide:has(> img.bg) .lead :not(pre) > code { background: color-mix(in srgb, var(--bg) 75%, transparent); color: inherit; }
 .slide figure { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; overflow: hidden; }
 .slide figure img, .slide figure svg { max-width: 100%; max-height: 100%; min-height: 0; flex: 0 1 auto; object-fit: contain; border-radius: min(14px, var(--radius)); }
 .slide figure:has(figcaption) img, .slide figure:has(figcaption) svg { max-height: calc(100% - 48px); }
@@ -352,6 +359,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
 /* --- components for business documents (usable on any slide) --- */
 .slide .lead { font-size: 30px; font-weight: 800; line-height: 1.4; padding: 12px 22px; background: var(--accent-soft); border-left: 8px solid var(--accent); border-radius: 0 min(12px, var(--radius)) min(12px, var(--radius)) 0; }
+.slide .lead > code, .slide .lead :not(pre) > code { background: color-mix(in srgb, var(--bg) 75%, transparent); }
 .slide .rows { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
 .slide .cols > table { align-self: start; }
 .slide td small, .slide th small { display: block; font-size: max(.78em, 22px); font-weight: 500; line-height: 1.3; }
@@ -362,6 +370,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide .box > h3 .tag { color: var(--fg); background: var(--bg); border-color: transparent; margin-right: .25em; }
 .slide .box > h3 .tag.ok { color: var(--ok); } .slide .box > h3 .tag.warn { color: var(--warn); } .slide .box > h3 .tag.ng { color: var(--ng); }
 .slide .box > h3 ~ * { margin: 12px 18px 14px; }
+.slide .box > h3 ~ table, .slide .box > h3 ~ img.cover { width: calc(100% - 36px); }
 .slide .box ul, .slide .box ol, .slide .card ul, .slide .card ol { font-size: inherit; gap: 8px; }
 .slide .cols.arrows { gap: 60px; }
 .slide .cols.arrows > * { position: relative; }
@@ -411,6 +420,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 .slide:where(.dense) .box { font-size: 20px; }
 .slide:where(.dense) .box > h3 { font-size: 20px; padding: 5px 14px; }
 .slide:where(.dense) .box > h3 ~ * { margin: 9px 14px 11px; }
+.slide:where(.dense) .box > h3 ~ table, .slide:where(.dense) .box > h3 ~ img.cover { width: calc(100% - 28px); }
 .slide:where(.dense) .box ul, .slide:where(.dense) .box ol, .slide:where(.dense) .card ul, .slide:where(.dense) .card ol { gap: 5px; }
 .slide:where(.dense) .stat { font-size: 80px; }
 .slide:where(.dense) ol.flow { gap: 40px; font-size: 20px; }
@@ -583,6 +593,10 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   .slide tbody tr.speaking > * { background-color: transparent !important; }
   .slide tbody tr:nth-child(even).speaking > * { background-color: color-mix(in srgb, var(--card) 55%, transparent) !important; }
   .slide:where(.dense) tbody tr:nth-child(even).speaking > * { background-color: color-mix(in srgb, var(--card) 75%, transparent) !important; }
+  .slide:has(> img.bg) tbody tr.speaking > * { background-color: transparent !important; }
+  .slide:has(> img.bg) tbody tr:nth-child(even).speaking > * { background-color: rgba(255,255,255,.08) !important; }
+  .slide:has(> img.bg) :is(.card, .box) tbody tr:nth-child(even).speaking > * { background-color: color-mix(in srgb, var(--card) 55%, transparent) !important; }
+  .slide:where(.dense):has(> img.bg) :is(.card, .box) tbody tr:nth-child(even).speaking > * { background-color: color-mix(in srgb, var(--card) 75%, transparent) !important; }
   .slide-footer { transform: none !important; }
   #controls, #start, #caption, #toast, #overview, #sc-backdrop, #script, #help, #blank { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
