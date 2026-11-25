@@ -72,6 +72,8 @@ document.querySelectorAll('.row h2 code').forEach(function (c) {
 });
 document.querySelectorAll('.shot').forEach(function (s) {
   var iframe = s.firstElementChild;
+  iframe.tabIndex = -1;
+  iframe.setAttribute('aria-hidden', 'true');
   var src = (iframe.getAttribute('src') || '').replace('still=1&', '');
   s.tabIndex = 0;
   s.setAttribute('role', 'button');
@@ -84,9 +86,14 @@ document.querySelectorAll('.shot').forEach(function (s) {
 var filterBtns = document.querySelectorAll('.filters button');
 filterBtns.forEach(function (btn) {
   btn.addEventListener('click', function () {
-    var f = btn.getAttribute('data-filter');
+    var f = btn.getAttribute('data-filter'), shown = 0;
     filterBtns.forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
-    document.querySelectorAll('.row').forEach(function (r) { r.hidden = f !== 'all' && r.getAttribute('data-tone') !== f; });
+    document.querySelectorAll('.row').forEach(function (r) {
+      var hide = f !== 'all' && r.getAttribute('data-tone') !== f;
+      r.hidden = hide;
+      if (!hide) shown++;
+    });
+    if (live) live.textContent = f === 'all' ? ('Showing all ' + shown + ' themes') : ('Showing ' + shown + ' ' + f + ' themes');
     fit();
   });
 });

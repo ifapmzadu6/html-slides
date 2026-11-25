@@ -464,7 +464,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
 /* --- control bar --- */
 #controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; padding: 18px max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: linear-gradient(transparent, rgba(0,0,0,.82) 45%); color: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; font: 500 14px/1 var(--font); }
-#player.ui #controls { opacity: 1; pointer-events: auto; }
+#player.ui #controls, #controls:focus-within { opacity: 1; pointer-events: auto; }
 #bar { position: relative; display: flex; gap: 3px; padding: 0 4px; }
 #bar-tip { position: absolute; bottom: 26px; left: 0; transform: translateX(-50%); background: rgba(15,23,42,.92); color: #fff; padding: 5px 10px; border-radius: 6px; font: 600 12px/1.3 var(--font); white-space: nowrap; max-width: min(360px, 80vw); overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; transition: opacity .15s; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
 #bar-tip.show { opacity: 1; }
@@ -477,7 +477,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 #btns button { width: 44px; height: 40px; border: 0; background: none; color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font: 700 14px/1 var(--font); flex: none; transition: background .15s, opacity .15s; }
 #btns #b-rate { width: auto; min-width: 44px; padding: 0 8px; }
 #btns button:hover { background: rgba(255,255,255,.16); }
-#btns button:focus-visible, #bar button:focus-visible, #start button:focus-visible { outline: 3px solid #fff; outline-offset: 1px; }
+#btns button:focus-visible, #bar button:focus-visible, #start button:focus-visible, #voice:focus-visible { outline: 3px solid #fff; outline-offset: 1px; }
 #btns button.off { opacity: .45; }
 #btns svg { width: 24px; height: 24px; fill: currentColor; }
 #btns #count { width: auto; padding: 0 10px; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
@@ -601,6 +601,15 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   #controls, #start, #caption, #toast, #overview, #sc-backdrop, #script, #help, #blank { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+@media (forced-colors: active) {
+  .slide ul > li::before, .slide ol > li::before, .slide .badge { border: 2px solid CanvasText; }
+  .slide .card.speaking, .slide .box.speaking, .slide ol.flow > li.speaking { outline: 3px solid Highlight; outline-offset: 2px; }
+  .slide table.gantt td.bar { background: Highlight; color: HighlightText; border: 2px solid Highlight; forced-color-adjust: none; }
+  .slide table.gantt td.bar.alt { background: Canvas; color: CanvasText; border: 2px solid CanvasText; forced-color-adjust: none; }
+  #bar button span { border: 1px solid CanvasText; }
+  #bar button i { background: Highlight; forced-color-adjust: none; }
+  #controls, #caption-text, #toast, #hlp-card, #script, #bar-tip { border: 1px solid CanvasText; }
+}
 </style>
 </head>
 <body>
@@ -691,16 +700,16 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     <button id="b-prev" type="button" data-ta="prev" data-key="←"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
     <button id="b-play" type="button" data-ta="playPause" data-key="Space"><svg aria-hidden="true" viewBox="0 0 24 24"><path id="i-play" d="M6 3.5v17L21 12z"/></svg></button>
     <button id="b-next" type="button" data-ta="next" data-key="→"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-    <button id="count" type="button" data-ta="overview" data-key="G"></button>
+    <button id="count" type="button" data-ta="overview" data-key="G" aria-haspopup="dialog" aria-expanded="false"></button>
     <span id="time"></span>
     <span class="sp"></span>
     <select id="voice" data-ta="voice" hidden></select>
     <button id="b-rate" type="button" data-ta="rate" data-key="&lt; &gt;">1x</button>
     <button id="b-mute" type="button" data-ta="sound" data-key="M" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path id="i-mute" d="M3 9v6h4l5 5V4L7 9zm11.5-1.2v8.4a4.5 4.5 0 0 0 0-8.4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
     <button id="b-cc" type="button" data-ta="captions" data-key="C" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm1 9h8v2H5zm10 0h4v2h-4zM5 9h4v2H5zm6 0h8v2h-8z"/></svg></button>
-    <button id="b-script" type="button" data-ta="transcript" data-key="T"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h16v2H4zm0 4h11v2H4zm0 4h11v2H4z"/></svg></button>
-    <button id="b-grid" type="button" data-ta="overview" data-key="G"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z"/></svg></button>
-    <button id="b-help" type="button" data-ta="shortcuts" data-key="?"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-1-5h2v2h-2zm1-9a3.5 3.5 0 0 0-3.5 3.5h2A1.5 1.5 0 1 1 13.5 10c0 .7-.4 1.1-1.1 1.6-.8.6-1.4 1.2-1.4 2.4h2c0-.7.3-1.1 1-1.6.9-.6 1.5-1.3 1.5-2.4A3.5 3.5 0 0 0 12 6z"/></svg></button>
+    <button id="b-script" type="button" data-ta="transcript" data-key="T" aria-haspopup="dialog" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h16v2H4zm0 4h11v2H4zm0 4h11v2H4z"/></svg></button>
+    <button id="b-grid" type="button" data-ta="overview" data-key="G" aria-haspopup="dialog" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z"/></svg></button>
+    <button id="b-help" type="button" data-ta="shortcuts" data-key="?" aria-haspopup="dialog" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-1-5h2v2h-2zm1-9a3.5 3.5 0 0 0-3.5 3.5h2A1.5 1.5 0 1 1 13.5 10c0 .7-.4 1.1-1.1 1.6-.8.6-1.4 1.2-1.4 2.4h2c0-.7.3-1.1 1-1.6.9-.6 1.5-1.3 1.5-2.4A3.5 3.5 0 0 0 12 6z"/></svg></button>
     <button id="b-full" type="button" data-ta="fullscreen" data-key="F" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><path id="i-full" d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
   </div>
 </div>
@@ -711,7 +720,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 <div id="sc-backdrop" hidden></div>
 <aside id="script" role="dialog" aria-modal="true" data-ta="transcript" hidden>
   <div id="sc-head"><span data-t="transcript"></span><button id="sc-copy" type="button" data-t="copy"></button><button id="sc-close" type="button" data-ta="closeOverview" data-key="Esc">×</button></div>
-  <div id="sc-search-wrap"><input id="sc-search" type="search" autocomplete="off"><span id="sc-count"></span><button id="sc-clear" type="button" data-ta="clearSearch" hidden>×</button></div>
+  <div id="sc-search-wrap"><input id="sc-search" type="search" autocomplete="off"><span id="sc-count" role="status" aria-live="polite" aria-atomic="true"></span><button id="sc-clear" type="button" data-ta="clearSearch" hidden>×</button></div>
   <div id="sc-body"></div>
   <div id="sc-empty" data-t="noMatch" hidden></div>
 </aside>
@@ -1048,7 +1057,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     var resume = !ended && mid && (cueIdx || partIdx || audioPausedText);
     if (ended) { ended = false; showSlide(0, false); }
     else if (!mid) showSlide(cur, false);
-    playing = true; everPlayed = true; startEl.hidden = true; mid = true;
+    playing = true; everPlayed = true; startEl.hidden = true; syncInert(); mid = true;
     setWake(true);
     clearInterval(progTimer); progTimer = setInterval(function () { if (playing && inPart) updateProgress(); }, 100);
     var my = ++tok; stopSpeech(); updateUI(); poke();
@@ -1065,7 +1074,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     audioPausedText = null;
     playing = false; inPart = false; partPf = 0; setWake(false); clearInterval(progTimer); ended = true; mid = false; tok++; setCaption('');
     $('#start-meta').textContent = tr('replay');
-    startEl.hidden = false; updateUI();
+    startEl.hidden = false; syncInert(); updateUI();
+    if (!CHECK && $('#start-play')) { try { $('#start-play').focus({ preventScroll: true }); } catch (e) {} }
   }
   function go(i) {
     if (i < 0 || i >= slides.length) return;
@@ -1073,7 +1083,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     audioPausedText = null; partPf = 0;
     tok++; stopSpeech(); ended = false;
     if (playing) { showSlide(i, false); mid = true; var my = ++tok; wait(500, my, step); }
-    else { showSlide(i, true); startEl.hidden = true; }
+    else { showSlide(i, true); startEl.hidden = true; syncInert(); }
     poke();
   }
   function restartPart() { if (!playing) return; audioPausedText = null; inPart = false; partPf = 0; var my = ++tok; stopSpeech(); wait(120, my, step); }
@@ -1158,6 +1168,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     barCur = cur;
     fills.forEach(function (f, k) {
       barBtns[k].classList.toggle('cur', k === cur);
+      if (k === cur) barBtns[k].setAttribute('aria-current', 'step');
+      else barBtns[k].removeAttribute('aria-current');
       var pct = k < cur ? 100 : k > cur ? 0 : Math.round(frac * 100);
       var prev = parseInt(f.style.width, 10) || 0;
       var snap = slideChanged || k !== cur || pct < prev || !playing;
@@ -1211,10 +1223,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     player.classList.add('ui'); clearTimeout(uiTimer);
     uiTimer = setTimeout(function () {
       if (!playing) return;
-      if (canHover && $('#controls').matches(':hover')) { poke(); return; }
+      if ((canHover && $('#controls').matches(':hover')) || $('#controls').contains(document.activeElement)) { poke(); return; }
       player.classList.remove('ui');
     }, 2600);
   }
+  $('#controls').addEventListener('focusin', poke);
+  $('#controls').addEventListener('focusout', poke);
   var toastTimer = 0;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 3500); }
   function fmt(ms) { var s = Math.round(ms / 1000); return s < 60 ? tr('aboutSec').replace('{n}', s) : tr('aboutMin').replace('{n}', Math.max(1, Math.round(s / 60))); }
@@ -1256,7 +1270,17 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   /* ---------- slide overview ---------- */
   var ovEl = $('#overview'), ovGrid = $('#ov-grid'), ovResume = false, modalFocus = null;
   function anyModalOpen() { return !ovEl.hidden || !scEl.hidden || !hlpEl.hidden || !!(blankEl && !blankEl.hidden); }
-  function setBgInert(on) { stage.inert = on; $('#controls').inert = on; startEl.inert = on; }
+  function syncInert() {
+    var modal = anyModalOpen(), startUp = !startEl.hidden;
+    stage.inert = modal || startUp;
+    $('#controls').inert = modal || startUp;
+    startEl.inert = modal;
+    $('#b-grid').setAttribute('aria-expanded', ovEl.hidden ? 'false' : 'true');
+    $('#count').setAttribute('aria-expanded', ovEl.hidden ? 'false' : 'true');
+    $('#b-script').setAttribute('aria-expanded', scEl.hidden ? 'false' : 'true');
+    $('#b-help').setAttribute('aria-expanded', hlpEl.hidden ? 'false' : 'true');
+  }
+  function setBgInert() { syncInert(); }
   function saveFocus() { var a = document.activeElement; if (a && a !== document.body && a.focus) modalFocus = a; }
   function restoreFocus() { var a = modalFocus; modalFocus = null; if (a && document.contains(a)) { try { a.focus({ preventScroll: true }); } catch (e) {} } }
   function ovScale() { $$('.ov-item', ovGrid).forEach(function (b) { $('.ov-frame', b).style.transform = 'scale(' + (b.clientWidth / W) + ')'; }); }
@@ -1271,6 +1295,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     ovGrid.innerHTML = '';
     slides.forEach(function (s, i) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'ov-item' + (i === cur ? ' current' : '');
+      if (i === cur) b.setAttribute('aria-current', 'true');
       b.setAttribute('aria-label', s.getAttribute('aria-label'));
       var f = document.createElement('div'); f.className = 'ov-frame'; f.setAttribute('aria-hidden', 'true');
       var c = s.cloneNode(true); c.classList.add('active'); c.removeAttribute('aria-label'); c.removeAttribute('role');
@@ -1381,7 +1406,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     audioPausedText = null; ended = false;
     tok++; stopSpeech(); inPart = false; partPf = 0;
     showSlide(si, !autoPlay);
-    startEl.hidden = true;
+    startEl.hidden = true; syncInert();
     var T = timeline[cur];
     if (autoPlay) {
       if (T.length) {
@@ -1437,6 +1462,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
           var b = document.createElement('button'); b.type = 'button';
           var isCur = si === cur && ci === curCi && pi === curPi;
           b.className = 'sc-line' + (isCur ? ' cur' : '');
+          if (isCur) b.setAttribute('aria-current', 'true');
           b._rawText = p.cap;
           b.textContent = p.cap;
           b.addEventListener('click', function () { var r = scResume; closeScript(true); jumpTo(si, ci, pi, r, true); });
@@ -1758,10 +1784,11 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       s.parentNode.insertBefore(box, s.nextSibling);
     });
   }
-  if (CHECK) { startEl.hidden = true; if (document.readyState === 'complete') runCheck(); else window.addEventListener('load', runCheck); }
+  if (CHECK) { startEl.hidden = true; syncInert(); if (document.readyState === 'complete') runCheck(); else window.addEventListener('load', runCheck); }
   else if (qs.has('overview')) { startEl.hidden = true; openOverview(); }
   else if (qs.has('transcript')) { startEl.hidden = true; openScript(); }
   else if (qs.has('autoplay')) play(qs.has('mute'));
+  else syncInert();
   window.addEventListener('hashchange', function () { var raw = (location.hash || '').replace('#', ''), n = raw ? parseInt(raw, 10) : 1; if (n > 0 && n <= slides.length && n - 1 !== cur) { if (!ovEl.hidden) closeOverview(true); if (!scEl.hidden) closeScript(true); if (!hlpEl.hidden) closeHelp(true); if (blankEl && !blankEl.hidden) closeBlank(true); go(n - 1); } });
 })();
 </script>
