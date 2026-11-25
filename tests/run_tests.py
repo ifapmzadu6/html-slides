@@ -1372,6 +1372,40 @@ def main():
        thm_o == {"nAll": 10, "nDark": 3, "nLight": 7, "nReset": 10} and not js_errors(r_thm.stderr),
        (thm_o, js_errors(r_thm.stderr)[:2]))
 
+    # Batch 16 regression tests (build.py CSS comments, special filenames, toggleMute/isSoundOff sync)
+    css_cmt_src = HEAD + '<style>/* reference url(https://example.com) @import .fake-only-in-comment */ .realcls { color: var(--accent); }</style>\n<section class="slide title"><h1 class="realcls" data-say="Hi.">Hi</h1></section>\n'
+    ok("build: ignores external url()/@import inside CSS comments", not errors(build.lint(css_cmt_src)[3]))
+    css_cmt_bad = css_cmt_src.replace('class="realcls"', 'class="fake-only-in-comment"')
+    ok("build: does not treat class names inside CSS comments as defined custom classes",
+       any(i["type"] == "unknown-class" for i in errors(build.lint(css_cmt_bad)[3])))
+    sp_src = tmp / "deck #1 100% テスト.slides.html"
+    sp_out = tmp / "deck #1 100% テスト.html"
+    sp_src.write_text(HEAD + COVER, encoding="utf-8")
+    ok("build: handles filenames with #, %, spaces, and Japanese across build/pdf/vtt",
+       build.build_once(sp_src, sp_out, pdf=tmp / "deck #1.pdf", vtt=tmp / "deck #1.vtt") == 0
+       and (tmp / "deck #1.pdf").is_file() and (tmp / "deck #1.vtt").is_file())
+    mute_mock = """<script>Object.defineProperty(window, 'speechSynthesis', { value: { getVoices: () => [], addEventListener: () => {}, cancel: () => {}, speak: () => {} }, configurable: true });</script>"""
+    mute_js = """<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      $('#start-play').click();
+      await sleep(3400);
+      const offAfterNoVoice = $('#b-mute').getAttribute('aria-pressed') === 'false';
+      $('#b-mute').click();
+      await sleep(100);
+      const triedUnmute = localStorage.getItem('hs:muted') === '0';
+      const pre = document.createElement('pre'); pre.id = 'mtest';
+      pre.textContent = JSON.stringify({ offAfterNoVoice, triedUnmute });
+      document.body.appendChild(pre);
+    })();</script>"""
+    m_html = tmp / "mute-sync.html"
+    m_html.write_text(deck.read_text(encoding="utf-8").replace('<div id="player">', mute_mock + '<div id="player">', 1).replace("</body>", mute_js + "</body>"), encoding="utf-8")
+    r_m = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=8000", "--dump-dom", m_html.as_uri()])
+    m_mo = re.search(r'<pre id="mtest">(.*?)</pre>', r_m.stdout, re.S)
+    mo = json.loads(html.unescape(m_mo.group(1))) if m_mo else {}
+    ok("player: clicking muted icon after no-voice fallback retries sound instead of muting",
+       mo.get("offAfterNoVoice") and mo.get("triedUnmute") and not js_errors(r_m.stderr), (mo, js_errors(r_m.stderr)[:2]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
