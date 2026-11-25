@@ -1019,6 +1019,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
 
   function step() {
     if (!playing) return;
+    if (!slides.length) { finish(); return; }
     var my = ++tok, T = timeline[cur];
     if (cueIdx >= T.length) {
       inPart = false; setCaption(''); updateProgress(1);
@@ -1081,7 +1082,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   function toggle() { playing ? pause() : play(); }
   function finish() {
     audioPausedText = null;
-    playing = false; inPart = false; partPf = 0; setWake(false); clearInterval(progTimer); ended = true; mid = false; tok++; setCaption('');
+    playing = false; inPart = false; partPf = 0; setWake(false); clearInterval(progTimer); ended = true; mid = false; tok++; stopSpeech();
+    $$('.speaking', stage).forEach(function (e) { e.classList.remove('speaking'); });
+    setCaption('');
     $('#start-meta').textContent = tr('replay');
     startEl.hidden = false; syncInert(); updateUI();
     if (!CHECK && $('#start-play')) { try { $('#start-play').focus({ preventScroll: true }); } catch (e) {} }
@@ -1196,8 +1199,9 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     player.classList.toggle('playing', playing);
     $('#i-play').setAttribute('d', playing ? PAUSE : PLAY);
     $('#b-play').setAttribute('aria-label', tr(playing ? 'pause' : 'play'));
-    $('#count').textContent = (cur + 1) + ' / ' + slides.length;
-    $('#count').setAttribute('aria-label', (cur + 1) + ' / ' + slides.length + ' — ' + tr('overview'));
+    var posLabel = slides.length ? ((cur + 1) + ' / ' + slides.length) : '0 / 0';
+    $('#count').textContent = posLabel;
+    $('#count').setAttribute('aria-label', posLabel + ' — ' + tr('overview'));
     $('#b-rate').textContent = rate + 'x';
     var soundOff = isSoundOff();
     $('#b-mute').classList.toggle('off', soundOff);
@@ -1639,12 +1643,12 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     var k = e.key, hit = true;
     if (blankEl && !blankEl.hidden) {
-      if (k === 'Escape' || k === 'b' || k === 'B' || k === ' ') { closeBlank(); e.preventDefault(); }
+      if (k === 'Escape' || k === 'b' || k === 'B' || k === ' ') { if (!e.repeat) closeBlank(); e.preventDefault(); }
       return;
     }
-    if (!hlpEl.hidden) { if (k === 'Escape' || k === '?') { closeHelp(); e.preventDefault(); } return; }
+    if (!hlpEl.hidden) { if (k === 'Escape' || k === '?') { if (!e.repeat) closeHelp(); e.preventDefault(); } return; }
     if (!scEl.hidden) {
-      if (k === 'Escape' || k === 't' || k === 'T') { closeScript(); e.preventDefault(); return; }
+      if (k === 'Escape' || k === 't' || k === 'T') { if (!e.repeat) closeScript(); e.preventDefault(); return; }
       if (k === '/' && scSearch) { scSearch.focus(); scSearch.select(); e.preventDefault(); return; }
       if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Home' || k === 'End') {
         var lines = $$('.sc-line:not([hidden])', scBody), li = lines.indexOf(document.activeElement);
@@ -1659,7 +1663,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       return;
     }
     if (!ovEl.hidden) {
-      if (k === 'Escape' || k === 'g' || k === 'G') { closeOverview(); e.preventDefault(); return; }
+      if (k === 'Escape' || k === 'g' || k === 'G') { if (!e.repeat) closeOverview(); e.preventDefault(); return; }
       if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'ArrowDown' || k === 'ArrowUp' || k === 'Home' || k === 'End') {
         var items = $$('.ov-item', ovGrid), idx = items.indexOf(document.activeElement);
         if (items.length) {
@@ -1678,6 +1682,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       return;
     }
     if (k >= '0' && k <= '9') {
+      if (e.repeat) { e.preventDefault(); return; }
       if (!jumpBuf && k === '0') { go(0); e.preventDefault(); poke(); return; }
       clearTimeout(jumpTimer);
       var nextBuf = jumpBuf + k, num = parseInt(nextBuf, 10);
@@ -1695,24 +1700,24 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       clearJump();
       if (k === 'Escape' || k === 'Backspace') { e.preventDefault(); return; }
     }
-    if (k === 'g' || k === 'G') { openOverview(); e.preventDefault(); return; }
-    if (k === 't' || k === 'T') { openScript(); e.preventDefault(); return; }
-    if (k === 'b' || k === 'B') { openBlank(); e.preventDefault(); return; }
-    if (k === '?') { openHelp(); e.preventDefault(); return; }
-    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button,summary,[role="button"]')) return; if (!startEl.hidden && !playing) startPlay(); else toggle(); }
-    else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button,a,summary,[role="button"]')) return; startPlay(); }
+    if (k === 'g' || k === 'G') { if (!e.repeat) openOverview(); e.preventDefault(); return; }
+    if (k === 't' || k === 'T') { if (!e.repeat) openScript(); e.preventDefault(); return; }
+    if (k === 'b' || k === 'B') { if (!e.repeat) openBlank(); e.preventDefault(); return; }
+    if (k === '?') { if (!e.repeat) openHelp(); e.preventDefault(); return; }
+    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button,summary,[role="button"]')) return; if (!e.repeat) { if (!startEl.hidden && !playing) startPlay(); else toggle(); } }
+    else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button,a,summary,[role="button"]')) return; if (!e.repeat) startPlay(); }
     else if (k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === 'n' || k === 'N') { if (k === 'Enter' && e.target.closest && e.target.closest('button,a,summary,[role="button"]')) return; go(cur + 1); }
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace' || k === 'p' || k === 'P') go(cur - 1);
     else if (k === 'ArrowUp' && playing) jumpPart(-1);
     else if (k === 'ArrowDown' && playing) jumpPart(1);
-    else if ((k === 'r' || k === 'R') && playing) restartPart();
+    else if ((k === 'r' || k === 'R') && playing) { if (!e.repeat) restartPart(); }
     else if (k === 'Home') go(0);
     else if (k === 'End') go(slides.length - 1);
-    else if (k === 'f' || k === 'F') fullscreen();
-    else if (k === 'c' || k === 'C') setCaps(!capsOn);
-    else if (k === 'm' || k === 'M') toggleMute();
-    else if (k === '>' || k === '.') cycleRate(1);
-    else if (k === '<' || k === ',') cycleRate(-1);
+    else if (k === 'f' || k === 'F') { if (!e.repeat) fullscreen(); }
+    else if (k === 'c' || k === 'C') { if (!e.repeat) setCaps(!capsOn); }
+    else if (k === 'm' || k === 'M') { if (!e.repeat) toggleMute(); }
+    else if (k === '>' || k === '.') { if (!e.repeat) cycleRate(1); }
+    else if (k === '<' || k === ',') { if (!e.repeat) cycleRate(-1); }
     else hit = false;
     if (hit) { e.preventDefault(); poke(); }
   });

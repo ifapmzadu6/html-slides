@@ -1787,6 +1787,67 @@ def main():
        ime_o == {"nfkcMatch": True, "emojiMark": True, "imeEnterStaysOpen": True, "imeEscStaysOpen": True, "linkDidNotAdvance": True, "bsCancelledJump": True}
        and not js_errors(r_ime.stderr), (ime_o, js_errors(r_ime.stderr)[:2]))
 
+    # Batch 28 regression tests (finish() stops speech & clears .speaking, key-repeat guard on toggles, check.py --json artifacts/error parity)
+    fin_deck = built(tmp, "fin-test.html", HEAD + '<section class="slide title"><h1 data-say="Only sentence.">Title</h1></section>\n')
+    fin_head = """<script>(function(){
+      window.__cancelled = 0;
+      const fakeSynth = {
+        speaking: false,
+        getVoices() { return [{ name: 'MockLocal', lang: 'ja-JP', localService: true, default: true }]; },
+        speak(u) { this.speaking = true; if (u.onstart) setTimeout(() => u.onstart(), 10); },
+        cancel() { this.speaking = false; window.__cancelled++; },
+        addEventListener() {}
+      };
+      window.__fakeSynth = fakeSynth;
+      Object.defineProperty(window, 'speechSynthesis', { value: fakeSynth, configurable: true });
+      window.SpeechSynthesisUtterance = function(t){ this.text = t; };
+    })();</script>"""
+    fin_js = """<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      $('#start-play').click();
+      await sleep(700);
+      const wasSpeaking = !!$('.speaking') && window.__fakeSynth.speaking === true;
+      const cancelBefore = window.__cancelled;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      const endedClean = !$('#start').hidden && !$('.speaking') && window.__fakeSynth.speaking === false && window.__cancelled > cancelBefore;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true, cancelable: true }));
+      const repeatSpaceIgnored = !$('#start').hidden;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', repeat: true, bubbles: true, cancelable: true }));
+      const repeatGridIgnored = $('#overview').hidden;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', repeat: true, bubbles: true, cancelable: true }));
+      const capsAfterRepeat = $('#b-cc').getAttribute('aria-pressed');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', repeat: false, bubbles: true, cancelable: true }));
+      const capsAfterPress = $('#b-cc').getAttribute('aria-pressed');
+      const pre = document.createElement('pre'); pre.id = 'fintest';
+      pre.textContent = JSON.stringify({ wasSpeaking, endedClean, repeatSpaceIgnored, repeatGridIgnored, capsToggledOnlyOnPress: capsAfterRepeat !== capsAfterPress });
+      document.body.appendChild(pre);
+    })();</script>"""
+    fin_run = tmp / "fin-run.html"
+    fin_run.write_text(
+        fin_deck.read_text(encoding="utf-8").replace("</head>", fin_head + "</head>").replace("</body>", fin_js + "</body>"),
+        encoding="utf-8",
+    )
+    r_fin = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", fin_run.as_uri() + "?noanim=1"])
+    m_fin = re.search(r'<pre id="fintest">(.*?)</pre>', r_fin.stdout, re.S)
+    fin_o = json.loads(html.unescape(m_fin.group(1))) if m_fin else {}
+    ok("player: finish() stops speech & clears .speaking on ArrowDown, and toggle keys ignore e.repeat",
+       fin_o == {"wasSpeaking": True, "endedClean": True, "repeatSpaceIgnored": True, "repeatGridIgnored": True, "capsToggledOnlyOnPress": True}
+       and not js_errors(r_fin.stderr), (fin_o, js_errors(r_fin.stderr)[:2]))
+    chk_sc = tmp / "chk-json.md"
+    chk_vtt = tmp / "chk-json.vtt"
+    r_cj_art = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--script", str(chk_sc), "--vtt", str(chk_vtt), "--json"], capture_output=True, text=True)
+    cj_art = json.loads(r_cj_art.stdout) if r_cj_art.stdout.strip() else {}
+    ok("check.py --json: includes artifacts paths after --script/--vtt export",
+       r_cj_art.returncode == 0 and cj_art.get("artifacts", {}).get("script") == str(chk_sc.resolve())
+       and cj_art.get("artifacts", {}).get("vtt") == str(chk_vtt.resolve()), cj_art)
+    bad_pdf_dir = tmp / "bad-pdf-dir"
+    bad_pdf_dir.mkdir()
+    r_cj_err = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--pdf", str(bad_pdf_dir), "--json"], capture_output=True, text=True)
+    cj_err = json.loads(r_cj_err.stdout) if r_cj_err.stdout.strip() else {}
+    ok("check.py --json: includes structured error field when export fails",
+       r_cj_err.returncode == 2 and "PDF could not be saved" in cj_err.get("error", ""), cj_err)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
