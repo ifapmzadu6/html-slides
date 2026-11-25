@@ -11,6 +11,7 @@ Usage:
   python3 add_voice.py deck.html --engine qwen3 --speaker Ono_Anna   # use local Qwen3-TTS (Windows or Apple Silicon)
   python3 add_voice.py deck.html --engine say    # use the built-in macOS voice (low quality)
   python3 add_voice.py deck.html --info          # inspect embedded audio details (no engine needed)
+  python3 add_voice.py deck.html --dry-run       # preview narration sentences and TTS pronunciation rules
   python3 add_voice.py deck.html --remove        # remove the embedded audio
 
 Speech engines (all run on this computer):
@@ -388,6 +389,8 @@ def _prep_qwen3_text(s, lang="japanese"):
     s = re.sub(r"[、,]+\s*$", "", s.strip())
     # Remove thousands-separator commas inside numbers (e.g. 4,800 -> 4800) so TTS does not pause inside numbers.
     s = re.sub(r"(?<=\d)[,，](?=\d{3}(?!\d))", "", s)
+    # Convert yen-prefixed amounts (e.g. ¥1200, ￥120000) to suffix 円 so place-value currency rules normalize them.
+    s = re.sub(r"[¥￥]([1-9１-９][0-9０-９]{0,11})(?![0-9０-９.．円万億])", r"\1円", s)
     # Expand the sign before decimal conversion can replace the leading zero.
     # Limit hyphen interpretation to measured quantities, keeping dates and IDs intact.
     signs = {"-": "マイナス", "－": "マイナス", "−": "マイナス", "+": "プラス", "＋": "プラス", "±": "プラスマイナス"}
@@ -445,7 +448,7 @@ def _prep_qwen3_text(s, lang="japanese"):
             s = re.sub(r"(?:^|(?<=[、。！？\sはがをにでともへ]))主な(?!の|で|ら)", "おもな", s)
     for k, v in QWEN3_SYMBOL_FIXES:
         s = s.replace(k, v)
-    if s and not re.search(r"[。！？!?.][」』）)\"']*$", s):
+    if s and not re.search(r"[。！？!?.][」』）)\"'”’]*$", s):
         s += "。"
     return s
 
@@ -686,12 +689,12 @@ def say_voices():
 
 
 def say_synth(text, voice, speed, tmp):
-    out = tmp / "say.aiff"
-    cmd = ["say", "-o", str(out), "-r", str(max(1, round(190 * speed)))]
+    out = tmp / "say.wav"
+    cmd = ["say", "-o", str(out), "--file-format=WAVE", "--data-format=LEI16@24000", "-r", str(max(1, round(190 * speed)))]
     if voice:
         cmd += ["-v", voice]
     subprocess.run(cmd + ["--", text], check=True, capture_output=True)
-    return out.read_bytes(), ".aiff"
+    return out.read_bytes(), ".wav"
 
 
 def wav_duration(raw):
@@ -715,12 +718,16 @@ def compress(raw, ext, tmp):
             return dst.read_bytes(), "audio/mpeg"
     if shutil.which("afconvert"):
         dst = tmp / "out.m4a"
-        r = subprocess.run(["afconvert", "-f", "m4af", "-d", "aac", "-b", "96000", "-c", "1", str(src), str(dst)], capture_output=True)
-        if r.returncode == 0 and dst.is_file() and dst.stat().st_size > 0:
-            return dst.read_bytes(), "audio/mp4"
+        # CoreAudio rejects 96 kbps AAC for <=24 kHz mono WAVs (and 64 kbps for <=16 kHz); step down cleanly.
+        for br_args in (["-b", "96000"], ["-b", "64000"], []):
+            if dst.exists():
+                dst.unlink()
+            r = subprocess.run(["afconvert", "-f", "m4af", "-d", "aac"] + br_args + ["-c", "1", str(src), str(dst)], capture_output=True)
+            if r.returncode == 0 and dst.is_file() and dst.stat().st_size > 0:
+                return dst.read_bytes(), "audio/mp4"
     if ext == ".wav":
         return raw, "audio/wav"
-    raise SystemExit("ERROR: the audio could not be converted. Install ffmpeg.")
+    raise RuntimeError("the audio could not be converted. Install ffmpeg.")
 
 
 def trim_clip(uri, seconds):
@@ -732,16 +739,22 @@ def trim_clip(uri, seconds):
         raise ValueError("unsupported embedded audio format")
     raw = base64.b64decode(encoded, validate=True)
     if header != "data:audio/wav;base64":
-        if not shutil.which("ffmpeg"):
+        ffmpeg = shutil.which("ffmpeg")
+        afconvert = shutil.which("afconvert")
+        if not ffmpeg and not afconvert:
             raise ValueError("install ffmpeg to trim MP3 or M4A clips")
         with tempfile.TemporaryDirectory() as tmp:
             source = pathlib.Path(tmp) / ("clip.mp3" if "mpeg" in header else "clip.m4a")
             source.write_bytes(raw)
             decoded = pathlib.Path(tmp) / "decoded.wav"
-            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(source), "-c:a", "pcm_s16le", str(decoded)],
-                           check=True, capture_output=True)
+            if ffmpeg:
+                subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-i", str(source), "-c:a", "pcm_s16le", str(decoded)],
+                               check=True, capture_output=True)
+            else:
+                subprocess.run([afconvert, "-f", "WAVE", "-d", "LEI16", str(source), str(decoded)],
+                               check=True, capture_output=True)
             if not decoded.is_file() or not decoded.stat().st_size:
-                raise ValueError("ffmpeg produced empty audio")
+                raise ValueError("audio decoder produced empty audio")
             raw = decoded.read_bytes()
     with wave.open(io.BytesIO(raw), "rb") as audio:
         rate = audio.getframerate()
@@ -792,37 +805,42 @@ def main():
     ap.add_argument("--instruct", default=QWEN3_DEFAULT_INSTRUCT, help="style/emotion instruction for qwen3 (empty string to disable)")
     ap.add_argument("--temperature", type=float, help="sampling temperature for qwen3 (lower is calmer)")
     ap.add_argument("--speed", type=float, default=1.0)
+    ap.add_argument("--json", action="store_true", help="print --info or --dry-run output as JSON")
     action = ap.add_mutually_exclusive_group()
     action.add_argument("--list", action="store_true")
     action.add_argument("--info", action="store_true", help="show details about embedded audio in the deck")
+    action.add_argument("--dry-run", action="store_true", help="list narration sentences and normalized TTS readings without synthesizing")
     action.add_argument("--remove", action="store_true")
     action.add_argument("--trim-clip", nargs=2, metavar=("SENTENCE", "END_SECONDS"),
                         help="keep the start of an embedded sentence clip up to END_SECONDS")
     a = ap.parse_args()
-    if not (math.isfinite(a.speed) and a.speed > 0):
-        print("ERROR: --speed must be a finite number greater than zero.")
-        return 2
-    if a.temperature is not None and not (math.isfinite(a.temperature) and a.temperature >= 0):
-        print("ERROR: --temperature must be a finite number greater than or equal to zero.")
+    def err_out(msg):
+        if a.json:
+            print(json.dumps({"error": msg}, ensure_ascii=False))
+        else:
+            print("ERROR: " + msg)
         return 2
 
+    if a.json and not (a.info or a.dry_run):
+        return err_out("--json is only supported with --info or --dry-run.")
+    if not (math.isfinite(a.speed) and a.speed > 0):
+        return err_out("--speed must be a finite number greater than zero.")
+    if a.temperature is not None and not (math.isfinite(a.temperature) and a.temperature >= 0):
+        return err_out("--temperature must be a finite number greater than or equal to zero.")
+
     if a.url and a.engine in ("qwen3", "say"):
-        print("ERROR: --url is only supported with --engine voicevox or --engine kokoro.")
-        return 2
+        return err_out("--url is only supported with --engine voicevox or --engine kokoro.")
 
     deck = pathlib.Path(a.deck).resolve()
     if not deck.is_file():
-        print("ERROR: file not found: %s" % deck)
-        return 2
+        return err_out("file not found: %s" % deck)
     try:
         with deck_lock(deck):
             src = deck.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as e:
-        print("ERROR: could not read the deck: %s" % e)
-        return 2
+        return err_out("could not read the deck: %s" % e)
     if ENGINE not in src:
-        print("ERROR: this HTML was not built by this skill.")
-        return 2
+        return err_out("this HTML was not built by this skill.")
 
     old = {}
     m = BLOCK.search(src)
@@ -834,10 +852,32 @@ def main():
                 old = parsed if isinstance(parsed, dict) else {}
             except ValueError:
                 old = {}
+    def read_deck_texts():
+        browser = find_browser()
+        if not browser:
+            return None, "Chrome / Edge was not found. Set the CHROME environment variable to its path."
+        try:
+            r = run(browser, ["--window-size=1280,720", "--virtual-time-budget=5000", "--dump-dom", deck.as_uri() + "?check=1"])
+        except CheckError as e:
+            return None, "The narration could not be read: %s" % e
+        rep = re.search(r'<pre id="check-report">(.*?)</pre>', r.stdout, re.S)
+        if not rep:
+            return None, "The narration could not be read. Make the deck pass check.py first."
+        try:
+            raw_texts = json.loads(html.unescape(rep.group(1)))["texts"]
+            if not isinstance(raw_texts, list):
+                raise TypeError("texts is not a list")
+        except (ValueError, KeyError, TypeError) as e:
+            return None, "The narration could not be read (%s). Make the deck pass check.py first." % e
+        return list(dict.fromkeys(t for t in raw_texts if isinstance(t, str) and t.strip())), None
+
     if a.info:
         clips = old.get("clips") if isinstance(old.get("clips"), dict) else {}
         if not clips:
-            print("No embedded audio in %s." % deck.name)
+            if a.json:
+                print(json.dumps({"deck": deck.name, "has_audio": False, "clips": 0}, ensure_ascii=False, indent=2))
+            else:
+                print("No embedded audio in %s." % deck.name)
             return 0
         durs = old.get("durations") if isinstance(old.get("durations"), dict) else {}
         formats = {}
@@ -848,13 +888,63 @@ def main():
                 hdr = uri.partition(";")[0]
                 hdr = (hdr[5:] if hdr.startswith("data:") else hdr) or "unknown"
                 formats[hdr] = formats.get(hdr, 0) + 1
+        tot_sec = round(sum(v for v in durs.values() if isinstance(v, (int, float)) and math.isfinite(v) and v > 0), 2) if durs else None
+        if a.json:
+            payload = {
+                "deck": deck.name,
+                "has_audio": True,
+                "file_bytes": deck.stat().st_size,
+                "audio_bytes": total_b64,
+                "voice": old.get("voice"),
+                "label": old.get("label"),
+                "speed": old.get("speed"),
+                "clips": len(clips),
+                "formats": formats,
+            }
+            if tot_sec is not None:
+                payload["duration_sec"] = tot_sec
+                payload["timed_clips"] = len(durs)
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
         fmt_str = ", ".join("%s (%d)" % (k, v) for k, v in sorted(formats.items()))
         print("Deck: %s (%.2f MB total, ~%.2f MB audio data)" % (deck.name, deck.stat().st_size / 1e6, total_b64 / 1e6))
         print("Voice: %s (%s), speed: %s" % (old.get("label") or "unknown", old.get("voice") or "unknown", old.get("speed", "unknown")))
         print("Clips: %d [%s]" % (len(clips), fmt_str))
         if durs:
-            tot_sec = sum(v for v in durs.values() if isinstance(v, (int, float)) and math.isfinite(v) and v > 0)
             print("Duration: %.1f s across %d timed clip(s)" % (tot_sec, len(durs)))
+        return 0
+    if a.dry_run:
+        texts, err_msg = read_deck_texts()
+        if err_msg:
+            if a.json:
+                print(json.dumps({"error": err_msg}, ensure_ascii=False))
+            else:
+                print(err_msg)
+            return 2
+        head = DeckHead()
+        head.feed(src.partition("<!-- SLIDES:START")[0])
+        head.close()
+        deck_lang = head.attrs.get("lang") or "ja"
+        primary = deck_lang.lower().replace("_", "-").split("-")[0]
+        q_lang = QWEN3_DECK_LANGS.get(primary, primary or "japanese")
+        old_clips = old.get("clips") if isinstance(old.get("clips"), dict) else {}
+        entries = []
+        for t in texts:
+            spoken = _prep_qwen3_text(t, q_lang)
+            entries.append({"text": t, "spoken": spoken, "changed": spoken != t, "cached": t in old_clips})
+        cached_n = sum(1 for e in entries if e["cached"])
+        if a.json:
+            print(json.dumps({
+                "deck": deck.name, "lang": deck_lang, "total": len(entries),
+                "cached": cached_n, "new": len(entries) - cached_n, "sentences": entries,
+            }, ensure_ascii=False, indent=2))
+            return 0
+        print("Dry run: %s (%d sentences, %d cached, %d new, lang %s)" % (deck.name, len(entries), cached_n, len(entries) - cached_n, deck_lang))
+        for idx_s, e in enumerate(entries, 1):
+            mark = " [cached]" if e["cached"] else ""
+            print("  %2d.%s %s" % (idx_s, mark, e["text"]))
+            if e["changed"]:
+                print("      => %s" % e["spoken"])
         return 0
     if a.remove:
         try:
@@ -994,35 +1084,36 @@ def main():
         if shutil.which("say") is None:
             print("ERROR: the say engine exists only on macOS.")
             return 2
+        voices = say_voices()
         if a.list:
-            for name, loc in say_voices():
+            for name, loc in voices:
                 print("  %s  (%s)" % (name, loc))
             return 0
-        label = a.speaker or "Kyoko"
+        if a.speaker:
+            if voices and a.speaker not in {v for v, _ in voices}:
+                print("ERROR: there is no voice %s. Check with --list." % a.speaker)
+                return 2
+            label = a.speaker
+        else:
+            head = DeckHead()
+            head.feed(src.partition("<!-- SLIDES:START")[0])
+            head.close()
+            primary = (head.attrs.get("lang") or "ja").lower().replace("_", "-").split("-")[0]
+            matching = [name for name, loc in voices if loc.lower().replace("_", "-").split("-")[0] == primary]
+            preferred = "Kyoko" if primary == "ja" else ("Samantha" if primary == "en" else None)
+            if preferred and preferred in matching:
+                label = preferred
+            elif matching:
+                label = matching[0]
+            else:
+                label = "Kyoko"
         key = "say:%s" % label
 
     # --- get the narration sentences from the player ---
-    browser = find_browser()
-    if not browser:
-        print("Chrome / Edge was not found. Set the CHROME environment variable to its path.")
+    texts, err_msg = read_deck_texts()
+    if err_msg:
+        print(err_msg)
         return 2
-    try:
-        r = run(browser, ["--window-size=1280,720", "--virtual-time-budget=5000", "--dump-dom", deck.as_uri() + "?check=1"])
-    except CheckError as e:
-        print("The narration could not be read: %s" % e)
-        return 2
-    rep = re.search(r'<pre id="check-report">(.*?)</pre>', r.stdout, re.S)
-    if not rep:
-        print("The narration could not be read. Make the deck pass check.py first.")
-        return 2
-    try:
-        raw_texts = json.loads(html.unescape(rep.group(1)))["texts"]
-        if not isinstance(raw_texts, list):
-            raise TypeError("texts is not a list")
-    except (ValueError, KeyError, TypeError) as e:
-        print("The narration could not be read (%s). Make the deck pass check.py first." % e)
-        return 2
-    texts = list(dict.fromkeys(t for t in raw_texts if isinstance(t, str) and t.strip()))
 
     reuse = old["clips"] if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("clips"), dict) else {}
     reuse_durs = old["durations"] if (old.get("voice"), old.get("speed")) == (key, a.speed) and isinstance(old.get("durations"), dict) else {}
