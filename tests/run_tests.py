@@ -1441,6 +1441,41 @@ def main():
        ks_o.get("tagFg") != ks_o.get("tagBg") and ks_o.get("tagOkFg") != ks_o.get("tagFg")
        and ks_o.get("codeFg") != ks_o.get("cardBg") and ks_o.get("secStatFg") != ks_o.get("secBg"), ks_o)
 
+    # Batch 18 regression tests (ol.flow & tables on .section and img.bg)
+    ks2_src = (
+        HEAD +
+        '<section class="slide section"><h2 data-say="Flow.">Flow</h2><ol class="flow"><li>A</li><li>B</li></ol>'
+        '<table class="matrix"><thead><tr><th>K</th><th>V</th></tr></thead><tbody><tr><th>R</th><td class="ok">○</td></tr></tbody></table></section>\n'
+        '<section class="slide"><img class="bg" data-bleed src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" alt="">'
+        '<h2 data-say="Bg.">Bg</h2><div class="card"><table><thead><tr><th>K</th></tr></thead><tbody><tr><td class="ok">V</td></tr></tbody></table></div></section>\n'
+    )
+    ks2_deck = built(tmp, "ks2-contrast.html", ks2_src)
+    ks2_js = """<script>(function(){
+      const s1 = document.querySelectorAll('#stage > section.slide')[0];
+      const s2 = document.querySelectorAll('#stage > section.slide')[1];
+      const cs = (el, p) => getComputedStyle(el, p);
+      const secTbl = s1.querySelector('table');
+      const flowLi = s1.querySelector('ol.flow > li');
+      const cardTbl = s2.querySelector('.card table');
+      const pre = document.createElement('pre'); pre.id = 'ks2';
+      pre.textContent = JSON.stringify({
+        secTblBg: cs(secTbl).backgroundColor,
+        secTblFg: cs(secTbl).color,
+        flowCircleBg: cs(flowLi, '::before').backgroundColor,
+        flowCardBg: cs(flowLi).backgroundColor,
+        cardTblBg: cs(cardTbl).backgroundColor
+      });
+      document.body.appendChild(pre);
+    })();</script>"""
+    ks2_run = tmp / "ks2-run.html"
+    ks2_run.write_text(ks2_deck.read_text(encoding="utf-8").replace("</body>", ks2_js + "</body>"), encoding="utf-8")
+    r_ks2 = check.run(browser, ["--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", ks2_run.as_uri() + "?still=1"])
+    m_ks2 = re.search(r'<pre id="ks2">(.*?)</pre>', r_ks2.stdout, re.S)
+    ks2_o = json.loads(html.unescape(m_ks2.group(1))) if m_ks2 else {}
+    ok("CSS: .section table uses theme surface, flow step badge contrasts card, and img.bg card table stays transparent",
+       ks2_o.get("secTblBg") != "rgba(0, 0, 0, 0)" and ks2_o.get("secTblFg") != ks2_o.get("secTblBg")
+       and ks2_o.get("flowCircleBg") != ks2_o.get("flowCardBg") and ks2_o.get("cardTblBg") == "rgba(0, 0, 0, 0)", ks2_o)
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
