@@ -1887,6 +1887,129 @@ def main():
     ok("CSS: print speaker notes use named @page notes for multi-page margins",
        "@page notes" in tpl_txt and "page: notes;" in tpl_txt)
 
+    # Batch 30 regression tests (Cycle 9: ?mute=1 unmute-then-replay, embedded audio pause/rate/overview resume, jumpPart on silent slide & end-of-slide pause, mediaSession modal close, URL startup params & visibilitychange)
+    b30_src = (
+        HEAD +
+        '<section class="slide title"><h1 data-say="First sentence.">Title</h1><p data-say="Second sentence.">Sub</p></section>\n'
+        '<section class="slide"></section>\n'
+        '<section class="slide"><h2 data-say="Final sentence.">Final</h2></section>\n'
+    )
+    b30_deck = built(tmp, "b30-runtime.html", b30_src)
+    add_voice.save_voice_data(b30_deck, b30_deck.read_text(encoding="utf-8"), {
+        "voice": "test", "label": "Test", "speed": 1.0,
+        "clips": {"First sentence.": ea_wav, "Second sentence.": ea_wav, "Final sentence.": ea_wav},
+        "durations": {"First sentence.": 1.5, "Second sentence.": 1.5, "Final sentence.": 1.5},
+    })
+    b30_head = """<script>(function(){
+      window.__msHandlers = {};
+      if ('mediaSession' in navigator) {
+        const orig = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession);
+        navigator.mediaSession.setActionHandler = function(name, fn){ window.__msHandlers[name] = fn; return orig(name, fn); };
+      }
+      const OrigAudio = window.Audio;
+      window.__audios = [];
+      window.Audio = function(){
+        const a = {
+          src: '', currentTime: 0, duration: 1.5, paused: true, ended: false,
+          playbackRate: 1, defaultPlaybackRate: 1, preload: '', onended: null, onerror: null, _srcSets: 0,
+          play() {
+            this.paused = false; this.ended = false;
+            if (this.currentTime === 0) this.currentTime = 0.6;
+            return Promise.resolve();
+          },
+          pause() { this.paused = true; }
+        };
+        let _src = '';
+        Object.defineProperty(a, 'src', {
+          get() { return _src; },
+          set(v) { _src = v; a._srcSets++; a.currentTime = 0; a.ended = false; }
+        });
+        window.__audios.push(a);
+        return a;
+      };
+    })();</script>"""
+    b30_js = """<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      const cur = () => [...document.querySelectorAll('#stage > section.slide')].findIndex(s => s.classList.contains('active')) + 1;
+      // 1. ?mute=1 -> play -> unmute -> pause mid-sentence -> speed change -> resume preserves currentTime & updates playbackRate
+      $('#start-play').click();
+      await sleep(700);
+      const mutedStart = $('#b-mute').getAttribute('aria-pressed') === 'false';
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true }));
+      await sleep(250);
+      const aud = window.__audios[0];
+      const setsBeforePause = aud._srcSets;
+      aud.currentTime = 0.75;
+      // Pause via Space, change speed via '>', resume via Space
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: '>', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      await sleep(250);
+      const resumedSamePos = aud._srcSets === setsBeforePause && Math.abs(aud.currentTime - 0.75) < 0.01 && aud.playbackRate === 1.25;
+      // Open Overview while playing, close Overview -> resumes from paused time
+      aud.currentTime = 0.9;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+      const ovPaused = !$('#player').classList.contains('playing');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(250);
+      const ovResumedPos = $('#player').classList.contains('playing') && aud._srcSets === setsBeforePause && Math.abs(aud.currentTime - 0.9) < 0.01;
+      // 2. mediaSession nexttrack closes an open modal before switching slides
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+      const scWasOpen = !$('#script').hidden;
+      if (window.__msHandlers.nexttrack) window.__msHandlers.nexttrack();
+      const msClosedModal = scWasOpen && $('#script').hidden && cur() === 2;
+      // 3. jumpPart on empty slide 2 advances to slide 3 cleanly
+      await sleep(100);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      await sleep(100);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      const silentSlideAdvanced = cur() === 3;
+      // 4. Finish on slide 3 -> click Play again keeps user's unmuted state despite ?mute=1
+      await sleep(650);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      const atReplay = !$('#start').hidden;
+      $('#start-play').click();
+      await sleep(100);
+      const replayStayedUnmuted = $('#b-mute').getAttribute('aria-pressed') === 'true';
+      // 5. visibilitychange hidden pauses playback
+      Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      const visPaused = !$('#player').classList.contains('playing');
+      const pre = document.createElement('pre'); pre.id = 'b30';
+      pre.textContent = JSON.stringify({ mutedStart, resumedSamePos, ovPaused, ovResumedPos, msClosedModal, silentSlideAdvanced, atReplay, replayStayedUnmuted, visPaused });
+      document.body.appendChild(pre);
+    })();</script>"""
+    b30_run = tmp / "b30-run.html"
+    b30_run.write_text(
+        b30_deck.read_text(encoding="utf-8").replace("</head>", b30_head + "</head>").replace("</body>", b30_js + "</body>"),
+        encoding="utf-8",
+    )
+    r_b30 = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=6000", "--dump-dom", b30_run.as_uri() + "?mute=1&noanim=1"])
+    m_b30 = re.search(r'<pre id="b30">(.*?)</pre>', r_b30.stdout, re.S)
+    b30_o = json.loads(html.unescape(m_b30.group(1))) if m_b30 else {}
+    ok("player: audio pause/rate/overview resume, ?mute=1 unmute replay, silent-slide jumpPart, mediaSession modal close, visibilitychange",
+       b30_o == {"mutedStart": True, "resumedSamePos": True, "ovPaused": True, "ovResumedPos": True, "msClosedModal": True,
+                 "silentSlideAdvanced": True, "atReplay": True, "replayStayedUnmuted": True, "visPaused": True}
+       and not js_errors(r_b30.stderr), (b30_o, js_errors(r_b30.stderr)[:2]))
+    qs_js = """<script>(function(){
+      const pre = document.createElement('pre'); pre.id = 'qstest';
+      pre.textContent = JSON.stringify({
+        ovOpen: !document.getElementById('overview').hidden,
+        cur: [...document.querySelectorAll('#stage > section.slide')].findIndex(s => s.classList.contains('active')) + 1,
+        rate: document.getElementById('b-rate').textContent,
+        capsOff: document.getElementById('b-cc').getAttribute('aria-pressed') === 'false'
+      });
+      document.body.appendChild(pre);
+    })();</script>"""
+    qs_run = tmp / "qs-run.html"
+    qs_run.write_text(b30_deck.read_text(encoding="utf-8").replace("</body>", qs_js + "</body>"), encoding="utf-8")
+    r_qs = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=2000", "--dump-dom", qs_run.as_uri() + "?overview=1&caps=0&rate=1.5#3"])
+    m_qs = re.search(r'<pre id="qstest">(.*?)</pre>', r_qs.stdout, re.S)
+    qs_o = json.loads(html.unescape(m_qs.group(1))) if m_qs else {}
+    ok("player: URL startup params (?overview=1&caps=0&rate=1.5#3) initialize state accurately",
+       qs_o == {"ovOpen": True, "cur": 3, "rate": "1.5x", "capsOff": True} and not js_errors(r_qs.stderr), (qs_o, js_errors(r_qs.stderr)[:2]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
