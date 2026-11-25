@@ -1414,20 +1414,43 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   /* ---------- transcript panel ---------- */
   var scBg = $('#sc-backdrop'), scEl = $('#script'), scBody = $('#sc-body'), scSearch = $('#sc-search'), scCount = $('#sc-count'), scClear = $('#sc-clear'), scEmpty = $('#sc-empty'), scResume = false;
   if (scSearch) { scSearch.placeholder = tr('searchPlaceholder'); scSearch.setAttribute('aria-label', tr('searchPlaceholder')); }
+  function foldWithMap(s) {
+    var out = '', map = [];
+    for (var i = 0; i < s.length; ) {
+      var cp = s.codePointAt(i), step = cp > 0xffff ? 2 : 1, ch = s.slice(i, i + step);
+      var f = ch.normalize ? ch.normalize('NFKC').toLowerCase() : ch.toLowerCase();
+      for (var j = 0; j < f.length; j++) map.push(i);
+      out += f;
+      i += step;
+    }
+    map.push(s.length);
+    return { text: out, map: map };
+  }
   function renderHighlight(el, raw, q) {
     el.textContent = '';
     if (!q) { el.textContent = raw; return; }
-    var low = raw.toLowerCase(), pos = 0, hit;
+    var fm = foldWithMap(raw), low = fm.text, map = fm.map, pos = 0, rawPos = 0, hit;
     while ((hit = low.indexOf(q, pos)) >= 0) {
-      if (hit > pos) el.appendChild(document.createTextNode(raw.slice(pos, hit)));
-      var mk = document.createElement('mark'); mk.className = 'sc-hit'; mk.textContent = raw.slice(hit, hit + q.length);
-      el.appendChild(mk);
+      var rs = map[hit], re = map[hit + q.length];
+      if (re <= rs) {
+        var idx = hit + q.length;
+        while (idx < map.length && map[idx] <= rs) idx++;
+        re = idx < map.length ? map[idx] : raw.length;
+      }
+      if (rs > rawPos) el.appendChild(document.createTextNode(raw.slice(rawPos, rs)));
+      var ms = Math.max(rs, rawPos);
+      if (re > ms) {
+        var mk = document.createElement('mark'); mk.className = 'sc-hit'; mk.textContent = raw.slice(ms, re);
+        el.appendChild(mk);
+        rawPos = re;
+      }
       pos = hit + q.length;
     }
-    if (pos < raw.length) el.appendChild(document.createTextNode(raw.slice(pos)));
+    if (rawPos < raw.length) el.appendChild(document.createTextNode(raw.slice(rawPos)));
   }
   function filterScript() {
-    var q = (scSearch ? scSearch.value : '').trim().toLowerCase();
+    var qRaw = (scSearch ? scSearch.value : '').trim();
+    var q = qRaw ? (qRaw.normalize ? qRaw.normalize('NFKC').toLowerCase() : qRaw.toLowerCase()) : '';
     var groups = [], curG = null, total = 0, matched = 0;
     Array.prototype.forEach.call(scBody.children, function (el) {
       if (el.classList.contains('sc-slide')) { curG = { head: el, lines: [] }; groups.push(curG); }
@@ -1438,7 +1461,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
       g.lines.forEach(function (l) {
         total++;
         var raw = l._rawText != null ? l._rawText : l.textContent;
-        var hit = !q || raw.toLowerCase().indexOf(q) >= 0;
+        var hit = !q || foldWithMap(raw).text.indexOf(q) >= 0;
         l.hidden = !hit;
         if (hit) { any = true; matched++; renderHighlight(l, raw, q); }
       });
@@ -1566,6 +1589,7 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   if (scSearch) {
     scSearch.addEventListener('input', filterScript);
     scSearch.addEventListener('keydown', function (e) {
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === 'Escape') { closeScript(); e.preventDefault(); }
       else if (e.key === 'Enter') {
         var first = $('.sc-line:not([hidden])', scBody);
@@ -1678,7 +1702,8 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
   }
   function clearJump() { clearTimeout(jumpTimer); jumpTimer = 0; jumpBuf = ''; }
   document.addEventListener('keydown', function (e) {
-    if (e.target.closest && e.target.closest('input,select,textarea')) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.target.closest && e.target.closest('input,select,textarea,[contenteditable="true"],[contenteditable=""]')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     var k = e.key, hit = true;
     if (blankEl && !blankEl.hidden) {
@@ -1736,15 +1761,15 @@ body { font-family: var(--font); color: var(--fg); -webkit-text-size-adjust: 100
     if (jumpBuf) {
       if (k === 'Enter') { commitJump(); e.preventDefault(); poke(); return; }
       clearJump();
-      if (k === 'Escape') { e.preventDefault(); return; }
+      if (k === 'Escape' || k === 'Backspace') { e.preventDefault(); return; }
     }
     if (k === 'g' || k === 'G') { openOverview(); e.preventDefault(); return; }
     if (k === 't' || k === 'T') { openScript(); e.preventDefault(); return; }
     if (k === 'b' || k === 'B') { openBlank(); e.preventDefault(); return; }
     if (k === '?') { openHelp(); e.preventDefault(); return; }
-    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button')) return; if (!startEl.hidden && !playing) startPlay(); else toggle(); }
-    else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button')) return; startPlay(); }
-    else if (k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === 'n' || k === 'N') { if (k === 'Enter' && e.target.closest && e.target.closest('button')) return; go(cur + 1); }
+    if (k === ' ' || k === 'k' || k === 'K') { if (k === ' ' && e.target.closest && e.target.closest('button,summary,[role="button"]')) return; if (!startEl.hidden && !playing) startPlay(); else toggle(); }
+    else if (k === 'Enter' && !startEl.hidden) { if (e.target.closest && e.target.closest('button,a,summary,[role="button"]')) return; startPlay(); }
+    else if (k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === 'n' || k === 'N') { if (k === 'Enter' && e.target.closest && e.target.closest('button,a,summary,[role="button"]')) return; go(cur + 1); }
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace' || k === 'p' || k === 'P') go(cur - 1);
     else if (k === 'ArrowUp' && playing) jumpPart(-1);
     else if (k === 'ArrowDown' && playing) jumpPart(1);

@@ -1738,6 +1738,55 @@ def main():
     ok("mobile: #btns fit within 360px & 320px viewports at 0.75x/11-of-12 and sticky #ov-close stays visible",
        all(o.get("fits") and o.get("ovCloseVisible") for _, o in mob_ok), mob_ok)
 
+    # Batch 27 regression tests (Japanese IME guard in transcript search, NFKC full/half-width highlight, Enter on link, Backspace on digit jump)
+    ime_slides = (
+        '<section class="slide title"><h1 data-say="Ａ案は１２文字以上、🔑パスワード管理。">Title</h1><a id="sl-link" href="#1">Link</a></section>\n'
+        + "".join('<section class="slide"><h2 data-say="Slide %d.">Slide %d</h2></section>\n' % (k, k) for k in range(2, 13))
+    )
+    ime_deck = built(tmp, "ime-test.html", HEAD + ime_slides)
+    ime_js = """<script>(async function(){
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const $ = s => document.querySelector(s);
+      const cur = () => [...document.querySelectorAll('#stage > section.slide')].findIndex(s => s.classList.contains('active')) + 1;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+      const inp = $('#sc-search');
+      inp.focus();
+      inp.value = 'a案'; inp.dispatchEvent(new Event('input'));
+      const nfkcMatch = document.querySelectorAll('.sc-line:not([hidden])').length === 1
+        && ($('.sc-line:not([hidden]) mark.sc-hit') || {}).textContent === 'Ａ案';
+      inp.value = 'パスワード'; inp.dispatchEvent(new Event('input'));
+      const emojiMark = ($('.sc-line:not([hidden]) mark.sc-hit') || {}).textContent === 'パスワード';
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }));
+      const imeEnterStaysOpen = !$('#script').hidden;
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true, cancelable: true }));
+      const imeEscStaysOpen = !$('#script').hidden;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      const lnk = $('#sl-link');
+      lnk.focus();
+      lnk.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      const linkDidNotAdvance = cur() === 1;
+      lnk.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      const beforeDigit = cur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+      await sleep(600);
+      const bsCancelledJump = cur() === beforeDigit;
+      const pre = document.createElement('pre'); pre.id = 'imetest';
+      pre.textContent = JSON.stringify({ nfkcMatch, emojiMark, imeEnterStaysOpen, imeEscStaysOpen, linkDidNotAdvance, bsCancelledJump });
+      document.body.appendChild(pre);
+    })();</script>"""
+    ime_run = tmp / "ime-run.html"
+    ime_run.write_text(ime_deck.read_text(encoding="utf-8").replace("</body>", ime_js + "</body>"), encoding="utf-8")
+    r_ime = check.run(browser, ["--enable-logging=stderr", "--window-size=1280,720", "--virtual-time-budget=3000", "--dump-dom", ime_run.as_uri() + "?noanim=1"])
+    m_ime = re.search(r'<pre id="imetest">(.*?)</pre>', r_ime.stdout, re.S)
+    ime_o = json.loads(html.unescape(m_ime.group(1))) if m_ime else {}
+    ok("player: IME composition guard, NFKC/emoji transcript search, link Enter, and digit-jump Backspace",
+       ime_o == {"nfkcMatch": True, "emojiMark": True, "imeEnterStaysOpen": True, "imeEscStaysOpen": True, "linkDidNotAdvance": True, "bsCancelledJump": True}
+       and not js_errors(r_ime.stderr), (ime_o, js_errors(r_ime.stderr)[:2]))
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
