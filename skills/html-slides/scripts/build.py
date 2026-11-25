@@ -183,8 +183,35 @@ def _image_mime(path):
     return guessed if (guessed and guessed.startswith("image/")) else "application/octet-stream"
 
 
+def _split_srcset(val):
+    """Split an HTML srcset attribute into [(url, descriptor), ...] without breaking data: URIs."""
+    candidates = []
+    i, n = 0, len(val)
+    while i < n:
+        while i < n and val[i] in " \t\n\r\f,":
+            i += 1
+        if i >= n:
+            break
+        start = i
+        while i < n and val[i] not in " \t\n\r\f":
+            i += 1
+        url = val[start:i]
+        if url.endswith(","):
+            candidates.append((url[:-1], ""))
+            continue
+        while i < n and val[i] in " \t\n\r\f":
+            i += 1
+        dstart = i
+        while i < n and val[i] != ",":
+            i += 1
+        candidates.append((url, val[dstart:i].strip()))
+        if i < n and val[i] == ",":
+            i += 1
+    return candidates
+
+
 class _ImgLocator(HTMLParser):
-    """Locate real <img> and SVG <image> start tags (ignoring HTML comments and attribute values containing '>')."""
+    """Locate real <img>, <source>, and SVG <image> start tags (ignoring HTML comments and attribute values containing '>')."""
 
     def __init__(self, body):
         super().__init__(convert_charrefs=False)
@@ -193,7 +220,7 @@ class _ImgLocator(HTMLParser):
         self.tags = []
 
     def _record(self, tag):
-        if tag not in ("img", "image"):
+        if tag not in ("img", "image", "source"):
             return
         line, col = self.getpos()
         if line < 1 or line > len(self.line_offsets):
@@ -210,14 +237,27 @@ class _ImgLocator(HTMLParser):
         self._record(tag)
 
 
+def _inline_uri(ref, base, cache):
+    path = _local_image_path(ref, base)
+    if path is None or not path.is_file():
+        return None
+    uri = cache.get(path)
+    if uri is None:
+        b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+        uri = "data:%s;base64,%s" % (_image_mime(path), b64)
+        cache[path] = uri
+    return uri
+
+
 def _rewrite_img_src(tag_name, tag, base, cache):
-    """Replace local src (<img>) or href/xlink:href (<image>) attributes with base64 data URIs."""
-    target_attrs = ("src",) if tag_name == "img" else ("href", "xlink:href")
+    """Replace local src/srcset (<img>/<source>) or href/xlink:href (<image>) attributes with base64 data URIs."""
+    target_attrs = ("src", "srcset") if tag_name == "img" else (("srcset",) if tag_name == "source" else ("href", "xlink:href"))
     head = re.match(r"<\s*[A-Za-z0-9:_-]+", tag)
     scan_from = head.end() if head else len(tag)
     out, prev = [], 0
     for m in ATTR_TOKEN_RE.finditer(tag, scan_from):
-        if m.group(1).lower() not in target_attrs:
+        attr_low = m.group(1).lower()
+        if attr_low not in target_attrs:
             continue
         if m.group(2) is not None:
             val, quote = m.group(2), '"'
@@ -227,16 +267,30 @@ def _rewrite_img_src(tag_name, tag, base, cache):
             val, quote = m.group(4), '"'
         else:
             continue
-        path = _local_image_path(html.unescape(val), base)
-        if path is None or not path.is_file():
-            continue
-        uri = cache.get(path)
-        if uri is None:
-            b64 = base64.b64encode(path.read_bytes()).decode("ascii")
-            uri = "data:%s;base64,%s" % (_image_mime(path), b64)
-            cache[path] = uri
+        if attr_low == "srcset":
+            cands = _split_srcset(html.unescape(val))
+            rebuilt, changed = [], False
+            for url, desc in cands:
+                uri = _inline_uri(url, base, cache)
+                if uri is not None:
+                    rebuilt.append((uri + " " + desc).strip())
+                    changed = True
+                else:
+                    rebuilt.append((url + " " + desc).strip())
+            if not changed:
+                continue
+            new_val = ", ".join(rebuilt)
+            if quote == '"':
+                new_val = new_val.replace("&", "&amp;").replace('"', "&quot;")
+            else:
+                new_val = new_val.replace("&", "&amp;").replace("'", "&#x27;")
+        else:
+            uri = _inline_uri(html.unescape(val), base, cache)
+            if uri is None:
+                continue
+            new_val = uri
         out.append(tag[prev:m.start()])
-        out.append(m.group(1) + "=" + quote + uri + quote)
+        out.append(m.group(1) + "=" + quote + new_val + quote)
         prev = m.end()
     if not out:
         return tag
@@ -277,21 +331,24 @@ def _watch_sig(src):
     seen = set()
     for tag_name, start, end in loc.tags:
         tag = text[start:end]
-        target_attrs = ("src",) if tag_name == "img" else ("href", "xlink:href")
+        target_attrs = ("src", "srcset") if tag_name == "img" else (("srcset",) if tag_name == "source" else ("href", "xlink:href"))
         head = re.match(r"<\s*[A-Za-z0-9:_-]+", tag)
         scan_from = head.end() if head else len(tag)
         for m in ATTR_TOKEN_RE.finditer(tag, scan_from):
-            if m.group(1).lower() not in target_attrs:
+            attr_low = m.group(1).lower()
+            if attr_low not in target_attrs:
                 continue
             val = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
-            p = _local_image_path(html.unescape(val or ""), src.parent)
-            if p and p not in seen:
-                seen.add(p)
-                try:
-                    ist = p.stat()
-                    sigs.append((str(p), ist.st_mtime_ns, ist.st_size))
-                except OSError:
-                    sigs.append((str(p), 0, 0))
+            refs = [u for u, _ in _split_srcset(html.unescape(val or ""))] if attr_low == "srcset" else [html.unescape(val or "")]
+            for ref in refs:
+                p = _local_image_path(ref, src.parent)
+                if p and p not in seen:
+                    seen.add(p)
+                    try:
+                        ist = p.stat()
+                        sigs.append((str(p), ist.st_mtime_ns, ist.st_size))
+                    except OSError:
+                        sigs.append((str(p), 0, 0))
     return tuple(sigs)
 
 
@@ -318,9 +375,9 @@ class Lint(HTMLParser):
             return True
         return self.deck_dense and not any(c in cls for c in ("title", "section", "end"))
 
-    def add(self, level, typ, msg, hint, line=None):
+    def add(self, level, typ, msg, hint, line=None, slide=None):
         self.issues.append({"line": line or self.getpos()[0], "type": typ, "level": level, "msg": msg, "hint": hint,
-                            "slide": len(self.slides) if self.in_slide() else 0})
+                            "slide": slide if slide is not None else (len(self.slides) if self.in_slide() else 0)})
 
     def in_slide(self):
         return any(e["tag"] == "section" for e in self.stack)
@@ -341,17 +398,18 @@ class Lint(HTMLParser):
             if self.in_slide():
                 self.add("error", "nested", "A <section> is nested inside another <section>.",
                          'Close the previous slide with </section> before starting the next <section class="slide">.')
+            self.slides.append({"line": line, "cls": cls, "cues": 0})
+            sl_no = len(self.slides)
             if "slide" not in cls:
-                self.add("error", "no-slide-class", '<section> has no class="slide".', 'Write <section class="slide">.')
+                self.add("error", "no-slide-class", '<section> has no class="slide".', 'Write <section class="slide">.', slide=sl_no)
             for c in cls:
                 if c not in SLIDE_CLASSES and c not in self.custom:
                     self.add("error", "unknown-class", 'Class "%s" cannot be used on a slide.' % c,
                              near(c, SLIDE_CLASSES) + "Slide-level classes are: " + ", ".join(SLIDE_CLASSES[1:])
-                             + ". The layout inside a slide is chosen by classes on the elements inside it.")
+                             + ". The layout inside a slide is chosen by classes on the elements inside it.", slide=sl_no)
             if "data-say" in a:
                 self.add("error", "say-on-section", "data-say cannot be put on the <section> itself.",
-                         "Put data-say on the heading or the items inside the slide.")
-            self.slides.append({"line": line, "cls": cls, "cues": 0})
+                         "Put data-say on the heading or the items inside the slide.", slide=sl_no)
         elif not self.in_slide():
             self.add("error", "outside", "<%s> is outside any slide." % tag, INSIDE_SLIDES)
         else:
@@ -373,9 +431,13 @@ class Lint(HTMLParser):
         if "data-anim" in a and a["data-anim"] not in ANIMS:
             self.add("error", "unknown-anim", 'data-anim="%s" is not a valid animation.' % a["data-anim"],
                      near(a["data-anim"] or "", ANIMS) + "Valid values: " + ", ".join(ANIMS) + " (omit the attribute for the default rise-in).")
-        if "data-anim" in a and "data-say" not in a:
-            self.add("warn", "anim-without-say", "data-anim is set but there is no data-say, so nothing animates.",
-                     'Add data-say="narration sentence" to the same element, or remove data-anim.')
+        if "data-anim" in a:
+            if "voice" in cls:
+                self.add("warn", "anim-on-voice", "data-anim has no effect on a .voice element because .voice is never shown on screen.",
+                         "Remove data-anim from the .voice element, or put data-say and data-anim on a visible element instead.")
+            elif "data-say" not in a:
+                self.add("warn", "anim-without-say", "data-anim is set but there is no data-say, so nothing animates.",
+                         'Add data-say="narration sentence" to the same element, or remove data-anim.')
         if "data-caption" in a:
             if "voice" not in cls and not (a.get("data-say") or "").strip():
                 self.add("error", "caption-without-say", "data-caption is set but data-say (the narration) is missing.",
@@ -409,9 +471,10 @@ class Lint(HTMLParser):
             else:
                 self.seen_ids[elem_id] = line
         style_val = a.get("style") or ""
-        if style_val and re.search(r"url\(\s*[\"']?((https?:)?//|file:)", style_val, re.I):
+        style_clean = re.sub(r"/\*.*?\*/", "", style_val, flags=re.S) if style_val else ""
+        if style_clean and re.search(r"url\(\s*[\"']?((https?:)?//|file:)", style_clean, re.I):
             self.add("error", "external", "<%s> loads an external URL in its style attribute." % tag, NO_EXTERNAL)
-        m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", style_val, re.I)
+        m = re.search(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", style_clean, re.I)
         floor = 14 if self.is_dense_slide() else 22
         if m and float(m.group(1)) < floor and not any(e["tag"] == "svg" for e in self.stack) and tag != "svg":
             self.add("error", "small-text", "font-size: %spx is too small (minimum %dpx)." % (m.group(1), floor), check.HINTS["small-text"])
@@ -427,16 +490,19 @@ class Lint(HTMLParser):
                 self.add("error", "script", "<%s> uses a javascript: URL, which is not allowed." % tag,
                          "Remove the javascript: URL. Use a normal link or plain text instead.")
         srcset = (a.get("srcset") or "").strip()
-        if srcset and tag in EXTERNAL_TAGS:
-            for item in srcset.split(","):
-                u = item.strip().split()[0] if item.strip() else ""
+        srcset_urls = [u for u, _ in _split_srcset(srcset)] if srcset else []
+        if srcset_urls and tag in EXTERNAL_TAGS:
+            for u in srcset_urls:
                 if re.match(r"((https?|ftp|javascript|file):|//)", u, re.I):
                     self.add("error", "external", "<%s> loads an external URL in srcset (it will not show when the deck is opened offline)." % tag, NO_EXTERNAL)
                     break
-        if tag in ("img", "image") and self.in_slide():
-            img_refs = [(a.get("src") or "").strip()] if tag == "img" else [
-                (a.get(k) or "").strip() for k in ("href", "xlink:href") if k in a
-            ]
+        if tag in ("img", "image", "source") and self.in_slide():
+            if tag == "img":
+                img_refs = [(a.get("src") or "").strip()] + srcset_urls
+            elif tag == "source":
+                img_refs = srcset_urls
+            else:
+                img_refs = [(a.get(k) or "").strip() for k in ("href", "xlink:href") if k in a]
             if tag == "img":
                 img_src = img_refs[0]
                 if not img_src or "\x00" in img_src:
@@ -483,7 +549,8 @@ class Lint(HTMLParser):
                 row["cells"] = row.get("cells", 0) + cs
         if tag not in VOID:
             voice_cap = a.get("data-caption") if ("data-caption" in a and "voice" in cls and not (a.get("data-say") or "").strip()) else None
-            entry = {"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap}
+            needs_text = self.in_slide() and tag != "section" and ("data-say" in a or "voice" in cls) and not (a.get("data-say") or "").strip() and not (a.get("data-caption") or "").strip()
+            entry = {"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap, "needs_text": needs_text}
             if tag == "table" and "gantt" in cls:
                 entry["gantt_head"] = None
             elif tag == "tr":
@@ -538,6 +605,9 @@ class Lint(HTMLParser):
                                  "Gantt row has %d column(s) (counting colspan) but header has %d." % (e.get("cells", 0), tbl["gantt_head"]),
                                  "Make every row's cells (th + td colspans) add up to exactly %d columns." % tbl["gantt_head"],
                                  line=e["line"])
+        if e.get("needs_text") and not e["text"].strip():
+            self.add("warn", "empty-say", "<%s> has empty narration and no visible text to read." % e["tag"],
+                     'Write the narration sentence in data-say="...", or add text inside the element.', line=e["line"])
         if e.get("voice_cap") is not None and e["text"].strip():
             say_n, cap_n = len(sentences(e["text"])), len(sentences(e["voice_cap"] or ""))
             if say_n != cap_n:
@@ -652,6 +722,10 @@ def parse_source(text):
             key = k.strip().lower()
             if sep and key in meta:
                 val = v.strip()
+                if key in setting_lines:
+                    problems.append({"line": offset, "slide": 0, "type": "duplicate-setting", "level": "warn",
+                                     "msg": 'Setting "%s" is defined more than once (first on line %d); the later value wins.' % (key, setting_lines[key]),
+                                     "hint": 'Remove the duplicate "%s:" line in the settings comment.' % key})
                 if key in ("lang", "density") and not val:
                     continue
                 if key in ("theme", "density"):
