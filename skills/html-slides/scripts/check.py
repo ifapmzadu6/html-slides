@@ -105,6 +105,30 @@ _CSS_EXT_RE = re.compile(r"url\(\s*[\"']?((https?:)?//|file:)|@import\b", re.I)
 _INLINE_STYLE_EXT_RE = re.compile(r"url\(\s*[\"']?((https?:)?//|file:)", re.I)
 
 
+def _split_srcset_urls(val):
+    """Extract candidate URLs from an HTML srcset attribute without breaking commas inside data: URIs."""
+    urls = []
+    i, n = 0, len(val)
+    while i < n:
+        while i < n and val[i] in " \t\n\r\f,":
+            i += 1
+        if i >= n:
+            break
+        start = i
+        while i < n and val[i] not in " \t\n\r\f":
+            i += 1
+        url = val[start:i]
+        if url.endswith(","):
+            urls.append(url[:-1])
+            continue
+        urls.append(url)
+        while i < n and val[i] != ",":
+            i += 1
+        if i < n and val[i] == ",":
+            i += 1
+    return urls
+
+
 class _ExternalCheck(HTMLParser):
     """Inspect real HTML tags, style attributes, and <style> blocks for external or file: resources."""
 
@@ -133,8 +157,7 @@ class _ExternalCheck(HTMLParser):
                     self.found = True
                     return
                 if k == "srcset":
-                    for item in val.split(","):
-                        u = item.strip().split()[0] if item.strip() else ""
+                    for u in _split_srcset_urls(val):
                         if _EXT_URL_RE.match(u):
                             self.found = True
                             return

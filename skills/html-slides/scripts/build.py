@@ -549,8 +549,9 @@ class Lint(HTMLParser):
                 row["cells"] = row.get("cells", 0) + cs
         if tag not in VOID:
             voice_cap = a.get("data-caption") if ("data-caption" in a and "voice" in cls and not (a.get("data-say") or "").strip()) else None
+            voice_say = self.in_slide() and tag != "section" and "voice" in cls and not (a.get("data-say") or "").strip()
             needs_text = self.in_slide() and tag != "section" and ("data-say" in a or "voice" in cls) and not (a.get("data-say") or "").strip() and not (a.get("data-caption") or "").strip()
-            entry = {"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap, "needs_text": needs_text}
+            entry = {"tag": tag, "line": line, "cls": cls, "kids": 0, "text": "", "voice_cap": voice_cap, "voice_say": voice_say, "needs_text": needs_text}
             if tag == "table" and "gantt" in cls:
                 entry["gantt_head"] = None
             elif tag == "tr":
@@ -608,6 +609,18 @@ class Lint(HTMLParser):
         if e.get("needs_text") and not e["text"].strip():
             self.add("warn", "empty-say", "<%s> has empty narration and no visible text to read." % e["tag"],
                      'Write the narration sentence in data-say="...", or add text inside the element.', line=e["line"])
+        if e.get("voice_say") and e["text"].strip():
+            vsay = e["text"].strip()
+            vsents = sentences(vsay)
+            if len(vsents) > 1 and "…" not in vsay:
+                c0 = re.sub(r"[、。！？!?.・,\s]", "", vsents[0])
+                if 0 < len(c0) <= 4:
+                    self.add("warn", "short-sentence", 'The narration starts with a very short fragment ("%s"), which flashes captions briefly and can destabilise TTS.' % vsents[0],
+                             'Join short lead-in fragments with the main sentence (for example, write "一つ目は、…" with a comma instead of "一つ目。…").', line=e["line"])
+            sym_m = re.search(r"[◎○◯△▲×✕]", vsay)
+            if sym_m:
+                self.add("warn", "say-symbol", '.voice contains a symbol ("%s") that speech engines may skip or misread.' % sym_m.group(0),
+                         "Spell out symbols in .voice (for example, 二重丸, 丸, 三角, バツ) and keep ◎ / ○ / △ / × in data-caption.", line=e["line"])
         if e.get("voice_cap") is not None and e["text"].strip():
             say_n, cap_n = len(sentences(e["text"])), len(sentences(e["voice_cap"] or ""))
             if say_n != cap_n:
@@ -1112,8 +1125,8 @@ def main():
             time.sleep(0.5)
             sig = _watch_sig(src)
             if sig and sig != last_sig:
-                # Debounce atomic/truncate editor saves: wait until size > 0 and signature stabilizes.
-                if sig[0][2] == 0:
+                # Debounce atomic/truncate editor saves: wait until existing source/image files are non-empty and stabilize.
+                if any(mtime > 0 and sz == 0 for _, mtime, sz in sig):
                     continue
                 time.sleep(0.12)
                 sig2 = _watch_sig(src)

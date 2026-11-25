@@ -599,6 +599,8 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
     queue = list(batches)
     while queue:
         batch = queue.pop(0)
+        if not any(s in wanted for s in batch):
+            continue
         if cache["aligner"] is None:
             for t in batch:
                 if t in wanted:
@@ -625,6 +627,8 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
             if not results:
                 raise ValueError("empty batch audio")
             audio = np.concatenate([np.asarray(r.audio) for r in results])
+            if len(audio) == 0:
+                raise ValueError("empty batch audio")
             sr = int(getattr(results[0], "sample_rate", 24000) or 24000)
             bwav = tmp / "batch.wav"
             bwav.write_bytes(pcm_to_wav(audio.tolist(), sr))
@@ -677,7 +681,7 @@ def qwen3_batch_synth(texts, voice, speed, model_id, cache, tmp, instruct=None, 
         except Exception:
             if len(batch) > 1:
                 mid = len(batch) // 2
-                queue[0:0] = [batch[:mid], batch[mid:]]
+                queue[0:0] = [sub for sub in (batch[:mid], batch[mid:]) if any(s in wanted for s in sub)]
             elif batch[0] in wanted:
                 out[batch[0]] = qwen3_synth(batch[0], voice, speed, model_id, cache, instruct, temperature, lang=lang)
     return out
@@ -757,10 +761,17 @@ def trim_clip(uri, seconds):
             source = pathlib.Path(tmp) / ("clip.mp3" if "mpeg" in header else "clip.m4a")
             source.write_bytes(raw)
             decoded = pathlib.Path(tmp) / "decoded.wav"
+            decoded_ok = False
             if ffmpeg:
-                subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-i", str(source), "-c:a", "pcm_s16le", str(decoded)],
-                               check=True, capture_output=True)
-            else:
+                r_ff = subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-i", str(source), "-c:a", "pcm_s16le", str(decoded)],
+                                      capture_output=True)
+                if r_ff.returncode == 0 and decoded.is_file() and decoded.stat().st_size:
+                    decoded_ok = True
+                elif not afconvert:
+                    raise subprocess.CalledProcessError(r_ff.returncode, r_ff.args, r_ff.stdout, r_ff.stderr)
+            if not decoded_ok and afconvert:
+                if decoded.exists():
+                    decoded.unlink()
                 subprocess.run([afconvert, "-f", "WAVE", "-d", "LEI16", str(source), str(decoded)],
                                check=True, capture_output=True)
             if not decoded.is_file() or not decoded.stat().st_size:
@@ -782,6 +793,7 @@ def trim_clip(uri, seconds):
         buf = io.BytesIO()
         with wave.open(buf, "wb") as out:
             out.setparams(audio.getparams())
+            out.setnframes(frames)
             out.writeframes(kept)
     return "data:audio/wav;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 

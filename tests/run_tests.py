@@ -32,9 +32,12 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
+import types as _types
 from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -2009,6 +2012,171 @@ def main():
     qs_o = json.loads(html.unescape(m_qs.group(1))) if m_qs else {}
     ok("player: URL startup params (?overview=1&caps=0&rate=1.5#3) initialize state accurately",
        qs_o == {"ovOpen": True, "cur": 3, "rate": "1.5x", "capsOff": True} and not js_errors(r_qs.stderr), (qs_o, js_errors(r_qs.stderr)[:2]))
+
+    # Batch 31 regression tests (Cycle 10: check.py srcset data URI // prefix, .voice symbol/short-sentence lint, build --watch E2E, qwen3_batch_synth context/bisection/aligner=None, compress fallback)
+    ok("check: srcset with data URI payload starting with // is not flagged as external",
+       not check.has_external_resources('<img srcset="data:image/png;base64,//9kAA== 1x, data:image/png;base64,AAAA 2x" src="data:image/png;base64,AAAA">'))
+    ok("check: srcset containing an external URL after a data URI is flagged",
+       check.has_external_resources('<img srcset="data:image/png;base64,AAAA 1x, https://example.com/2x.png 2x" src="data:image/png;base64,AAAA">'))
+    v_iss = build.lint(HEAD + '<section class="slide title"><h1>Hi</h1><p class="voice">一つ目。◎は二重丸です。</p></section>')[3]
+    ok("build: .voice element checks both say-symbol and short-sentence warnings",
+       any(i["type"] == "say-symbol" and i["level"] == "warn" for i in v_iss)
+       and any(i["type"] == "short-sentence" and i["level"] == "warn" for i in v_iss), v_iss)
+
+    # Real subprocess E2E test for build.py --watch --no-render (source edit + local image edit + clean stop)
+    w_dir = tmp / "watch-e2e"
+    w_dir.mkdir()
+    w_img = w_dir / "pic.png"
+    w_img.write_bytes(tiny_png)
+    w_src = w_dir / "deck.slides.html"
+    w_out = w_dir / "deck.html"
+    w_src.write_text(
+        HEAD + '<section class="slide title"><h1 data-say="Version one.">VersionOne</h1><img src="pic.png" alt="pic"></section>\n',
+        encoding="utf-8",
+    )
+    w_proc = subprocess.Popen(
+        [sys.executable, str(SKILL / "scripts" / "build.py"), str(w_src), "-o", str(w_out), "--watch", "--no-render"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        def wait_for(pred, timeout=8.0):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if pred():
+                    return True
+                time.sleep(0.1)
+            return False
+
+        w_built1 = wait_for(lambda: w_out.is_file() and "VersionOne" in w_out.read_text(encoding="utf-8"))
+        time.sleep(0.6)
+        w_src.write_text(
+            HEAD + '<section class="slide title"><h1 data-say="Version two.">VersionTwoUpdated</h1><img src="pic.png" alt="pic"></section>\n',
+            encoding="utf-8",
+        )
+        w_built2 = w_built1 and wait_for(lambda: "VersionTwoUpdated" in w_out.read_text(encoding="utf-8"))
+        b64_before = base64.b64encode(tiny_png).decode("ascii")
+        new_png = tiny_png + b"\x00\x01\x02\x03"
+        b64_after = base64.b64encode(new_png).decode("ascii")
+        time.sleep(0.6)
+        w_img.write_bytes(new_png)
+        w_built3 = w_built2 and wait_for(lambda: (b64_after + '"') in w_out.read_text(encoding="utf-8") and (b64_before + '"') not in w_out.read_text(encoding="utf-8"))
+        if os.name == "nt":
+            w_proc.terminate()
+            w_rc = w_proc.wait(timeout=8)
+            w_exit_ok = True
+        else:
+            w_proc.send_signal(signal.SIGINT)
+            w_rc = w_proc.wait(timeout=8)
+            w_exit_ok = w_rc == 0
+    finally:
+        if w_proc.poll() is None:
+            w_proc.kill()
+            w_proc.wait(timeout=5)
+        if w_proc.stdout:
+            w_proc.stdout.close()
+        if w_proc.stderr:
+            w_proc.stderr.close()
+    ok("build --watch: rebuilds on source and local image edits and exits cleanly",
+       w_built1 and w_built2 and w_built3 and w_exit_ok, (w_built1, w_built2, w_built3, w_exit_ok))
+
+    # Pure-Python mock tests for add_voice.qwen3_batch_synth (normal alignment, bisection skipping context-only half, aligner=None fallback)
+    class _FakeArr(list):
+        def tolist(self):
+            return list(self)
+
+    fake_np = _types.ModuleType("numpy")
+    fake_np.asarray = lambda x: _FakeArr(x)
+    fake_np.concatenate = lambda xs: _FakeArr([v for a in xs for v in a])
+
+    class _AlignItem:
+        def __init__(self, text, start_time, end_time):
+            self.text, self.start_time, self.end_time = text, start_time, end_time
+
+    class _TTSChunk:
+        def __init__(self, samples, sr=24000):
+            self.audio, self.sample_rate = samples, sr
+
+    batch_calls = []
+    sr_q = 24000
+    tone = [0.2 * math.sin(2 * math.pi * 440 * i / sr_q) for i in range(int(sr_q * 1.0))]
+    sil = [0.0] * int(sr_q * 0.3)
+
+    class _MockTTS:
+        def generate(self, **kw):
+            batch_calls.append(kw["text"])
+            n_lines = len(kw["text"].splitlines())
+            samples = []
+            for _ in range(n_lines):
+                samples.extend(tone)
+                samples.extend(sil)
+            return [_TTSChunk(samples, sr_q)]
+
+    class _MockAligner:
+        def __init__(self, fail_first=False):
+            self.fail_first = fail_first
+            self.calls = 0
+
+        def generate(self, audio, text, language):
+            self.calls += 1
+            if self.fail_first and self.calls == 1:
+                raise RuntimeError("simulated alignment failure")
+            items, t = [], 0.0
+            for line in text.splitlines():
+                items.append(_AlignItem(line, t, t + 1.0))
+                t += 1.3
+            return _types.SimpleNamespace(items=items)
+
+    fake_mlx = _types.ModuleType("mlx_audio")
+    fake_mlx_tts = _types.ModuleType("mlx_audio.tts")
+    fake_mlx_tts_u = _types.ModuleType("mlx_audio.tts.utils")
+    fake_mlx_stt = _types.ModuleType("mlx_audio.stt")
+    fake_mlx_stt_u = _types.ModuleType("mlx_audio.stt.utils")
+    fake_mlx_tts_u.load_model = lambda _m: _MockTTS()
+    fake_mlx_stt_u.load_model = lambda _m: _MockAligner()
+    mlx_mods = {
+        "numpy": fake_np,
+        "mlx_audio": fake_mlx,
+        "mlx_audio.tts": fake_mlx_tts,
+        "mlx_audio.tts.utils": fake_mlx_tts_u,
+        "mlx_audio.stt": fake_mlx_stt,
+        "mlx_audio.stt.utils": fake_mlx_stt_u,
+    }
+    with patch.dict(sys.modules, mlx_mods):
+        batch_calls.clear()
+        q_cache1 = {"model": _MockTTS(), "aligner": _MockAligner(fail_first=False)}
+        res_ok = add_voice.qwen3_batch_synth(["Alpha.", "Beta."], "Ryan", 1.0, "m", q_cache1, tmp, lang="english")
+        ok("add_voice qwen3_batch_synth: aligns multi-sentence batch into valid WAV clips in a single pass",
+           set(res_ok.keys()) == {"Alpha.", "Beta."}
+           and len(batch_calls) == 1
+           and all(add_voice.wav_duration(v) and add_voice.wav_duration(v) > 0.5 for v in res_ok.values()),
+           ({k: add_voice.wav_duration(v) for k, v in res_ok.items()}, list(batch_calls)))
+
+        batch_calls.clear()
+        q_cache2 = {"model": _MockTTS(), "aligner": _MockAligner(fail_first=True)}
+        res_bisect = add_voice.qwen3_batch_synth(
+            ["First."], "Ryan", 1.0, "m", q_cache2, tmp,
+            all_texts=["First.", "Second.", "Third."], lang="english",
+        )
+        # First call had 3 context sentences + sentinel; on alignment failure bisection must NOT synthesize ["Second.", "Third."]
+        ok("add_voice qwen3_batch_synth: bisection skips context-only halves when alignment fails",
+           set(res_bisect.keys()) == {"First."}
+           and len(batch_calls) == 2
+           and not any("Second." in c and "First." not in c for c in batch_calls),
+           (list(res_bisect.keys()), list(batch_calls)))
+
+        batch_calls.clear()
+        q_cache3 = {"model": _MockTTS(), "aligner": None}
+        res_noalign = add_voice.qwen3_batch_synth(["Solo."], "Ryan", 1.0, "m", q_cache3, tmp, all_texts=["Solo.", "Ctx."], lang="english")
+        ok("add_voice qwen3_batch_synth: aligner=None falls back to qwen3_synth for wanted sentences only",
+           set(res_noalign.keys()) == {"Solo."} and len(batch_calls) == 1, (list(res_noalign.keys()), list(batch_calls)))
+
+    # add_voice.compress: ffmpeg failure falls back cleanly to uncompressed WAV when afconvert is unavailable
+    raw_wav_c = add_voice.pcm_to_wav([0.1] * 4000, 16000)
+    with patch.object(add_voice.shutil, "which", side_effect=lambda cmd: "/fake/ffmpeg" if cmd == "ffmpeg" else None), \
+         patch.object(add_voice.subprocess, "run", return_value=_types.SimpleNamespace(returncode=1)):
+        c_bytes, c_mime = add_voice.compress(raw_wav_c, ".wav", tmp)
+    ok("add_voice compress: falls back to original WAV when ffmpeg fails and afconvert is absent",
+       c_mime == "audio/wav" and c_bytes == raw_wav_c)
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
