@@ -125,7 +125,7 @@ class _ExternalCheck(HTMLParser):
             val = (v or "").strip()
             if not val:
                 continue
-            if k == "style" and _INLINE_STYLE_EXT_RE.search(val):
+            if k == "style" and _INLINE_STYLE_EXT_RE.search(re.sub(r"/\*.*?\*/", "", val, flags=re.S)):
                 self.found = True
                 return
             if tag in _EXT_TAGS:

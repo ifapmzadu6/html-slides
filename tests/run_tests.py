@@ -1597,6 +1597,54 @@ def main():
     ok("themes.html a11y: preview iframes are excluded from Tab order and filter announces count",
        ta_o.get("allNonTab") is True and "3 dark" in ta_o.get("liveTxt", ""), ta_o)
 
+    # Batch 23 regression tests (build.py srcset inlining/lint/watch, inline style CSS comments, duplicate-setting, anim-on-voice, empty-say, empty footer round-trip)
+    ss_dir = tmp / "srcset-deck"
+    ss_dir.mkdir()
+    (ss_dir / "lo.png").write_bytes(tiny_png)
+    (ss_dir / "hi.png").write_bytes(tiny_png + b"\x00")
+    (ss_dir / "hero.webp").write_bytes(b"RIFF\x00\x00\x00\x00WEBP")
+    ss_src = (
+        HEAD +
+        '<section class="slide title"><h1 data-say="Hi.">Hi</h1>'
+        '<picture><source srcset="hero.webp 1x, hi.png 2x"><img src="lo.png" srcset="lo.png 1x, hi.png 2x" alt="hi"></picture></section>\n'
+    )
+    ss_m, ss_c, ss_s, ss_iss, _ = build.lint(ss_src, base_dir=ss_dir)
+    ss_out = ss_dir / "out.html"
+    build.assemble(ss_m, ss_c, ss_s, ss_out, base_dir=ss_dir)
+    ss_html = ss_out.read_text(encoding="utf-8")
+    ok("build: embeds local paths in img/source srcset and preserves descriptors",
+       not errors(ss_iss) and "data:image/webp;base64," in ss_html and ss_html.count("data:image/png;base64,") == 4
+       and "hi.png" not in ss_html and "hero.webp" not in ss_html and " 2x" in ss_html, ss_iss)
+    ss_miss = build.lint(HEAD + '<section class="slide title"><h1 data-say="Hi.">Hi</h1><img src="lo.png" srcset="lo.png 1x, missing-2x.png 2x" alt="hi"></section>', base_dir=ss_dir)[3]
+    ok("build: catches missing local file referenced in srcset", any(i["type"] == "missing-image" and "missing-2x.png" in i["msg"] for i in errors(ss_miss)), ss_miss)
+    ss_watch_file = ss_dir / "w.slides.html"
+    ss_watch_file.write_text(ss_src, encoding="utf-8")
+    ws1 = build._watch_sig(ss_watch_file)
+    (ss_dir / "hi.png").write_bytes(tiny_png + b"\x00\x01")
+    ws2 = build._watch_sig(ss_watch_file)
+    ok("build: --watch tracks local files referenced via srcset", ws1 != ws2)
+    cmt_inline = HEAD + '<section class="slide title"><h1 data-say="Hi." style="/* url(https://example.com/a.png) font-size: 10px */ color: var(--fg)">Hi</h1></section>'
+    ok("build & check: ignore CSS comments inside inline style attributes",
+       not errors(build.lint(cmt_inline)[3]) and not check.has_external_resources(cmt_inline))
+    dup_hdr = '<!--\ntitle: A\ntheme: light\ntheme: dark\n-->\n' + COVER
+    ok("build: warns on duplicate setting key in header comment",
+       any(i["type"] == "duplicate-setting" and i["level"] == "warn" for i in build.lint(dup_hdr)[3]))
+    aov_src = HEAD + '<section class="slide title"><p class="voice" data-anim="fade">Hi.</p></section>'
+    ok("build: warns anim-on-voice when data-anim is placed on .voice",
+       any(i["type"] == "anim-on-voice" and i["level"] == "warn" for i in build.lint(aov_src)[3]))
+    empty_say_src = HEAD + '<section class="slide title"><h1 data-say></h1></section>'
+    ok("build: warns empty-say on element with empty data-say and no text",
+       any(i["type"] == "empty-say" and i["level"] == "warn" for i in build.lint(empty_say_src)[3]))
+    sec_say_iss = build.lint(HEAD + '<section class="slide title" data-say="Bad."><h1>Hi</h1></section>')[3]
+    ok("build: reports slide number 1 for say-on-section errors",
+       any(i["type"] == "say-on-section" and i.get("slide") == 1 for i in sec_say_iss), sec_say_iss)
+    ef_deck = tmp / "empty-footer.html"
+    ef_meta = {"title": "PageNumOnly", "theme": "light", "lang": "ja", "density": "normal", "footer": ""}
+    build.assemble(ef_meta, "", COVER, ef_deck)
+    ef_src = tmp / "empty-footer.slides.html"
+    build.extract(ef_deck, ef_src)
+    ok("build: extract round-trips empty footer (page numbers only)", build.lint(ef_src.read_text(encoding="utf-8"))[0]["footer"] == "")
+
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
         if not passed:
