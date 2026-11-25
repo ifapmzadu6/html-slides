@@ -31,6 +31,7 @@ import math
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1247,6 +1248,77 @@ def main():
     ok("build.py --json: rejects duplicate export target with valid JSON", r_dup_b.returncode == 2 and json.loads(r_dup_b.stdout).get("ok") is False, r_dup_b.stdout)
     r_dup_c = subprocess.run([sys.executable, str(SKILL / "scripts" / "check.py"), str(deck), "--pdf", str(tmp / "same.out"), "--vtt", str(tmp / "same.out"), "--json"], capture_output=True, text=True)
     ok("check.py --json: rejects duplicate export target with valid JSON", r_dup_c.returncode == 2 and "error" in json.loads(r_dup_c.stdout), r_dup_c.stdout)
+
+    # Batch 14 regression tests (add_voice afconvert 24kHz AAC & trim, yen/quote TTS, voicevox mock, dry-run, --json, say speaker check)
+    ok("add_voice: _prep_qwen3_text avoids double period after typographic closing quotes",
+       add_voice._prep_qwen3_text("“完了です。”") == "“完了です。”" and add_voice._prep_qwen3_text("‘OK.’") == "‘OK.’")
+    ok("add_voice: _prep_qwen3_text normalizes yen-prefixed amounts (¥1,200 / ￥120,000)",
+       add_voice._prep_qwen3_text("月額¥1,200です。") == "月額千二百円です。" and add_voice._prep_qwen3_text("予算は￥120,000です。") == "予算は十二万円です。")
+    if shutil.which("afconvert"):
+        real_which = shutil.which
+        with patch.object(add_voice.shutil, "which", side_effect=lambda cmd: None if cmd == "ffmpeg" else real_which(cmd)):
+            m4a_raw, m4a_mime = add_voice.compress(add_voice.pcm_to_wav([0.1] * 24000, 24000), ".wav", tmp)
+            ok("add_voice: afconvert compresses 24kHz mono WAV to M4A without ffmpeg", m4a_mime == "audio/mp4" and len(m4a_raw) > 0, (m4a_mime, len(m4a_raw)))
+            m4a_uri = "data:audio/mp4;base64," + base64.b64encode(m4a_raw).decode("ascii")
+            trimmed_uri = add_voice.trim_clip(m4a_uri, 0.4)
+            ok("add_voice: trim_clip decodes M4A via afconvert when ffmpeg is unavailable", trimmed_uri.startswith("data:audio/wav;base64,"))
+    class _MockVoicevoxHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            if self.path == "/version":
+                body = json.dumps("0.20.0").encode("utf-8")
+            elif self.path == "/speakers":
+                body = json.dumps([{"name": "四国めたん", "styles": [{"id": 2, "name": "ノーマル"}]}]).encode("utf-8")
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            if self.path.startswith("/audio_query?"):
+                body = json.dumps({"speedScale": 1.0}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path.startswith("/synthesis?"):
+                n = int(self.headers.get("Content-Length", 0))
+                q = json.loads(self.rfile.read(n).decode("utf-8"))
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/wav")
+                self.end_headers()
+                self.wfile.write(b"RIFF" + str(q.get("speedScale")).encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    vv_srv = http.server.HTTPServer(("127.0.0.1", 0), _MockVoicevoxHandler)
+    threading.Thread(target=vv_srv.serve_forever, daemon=True).start()
+    try:
+        vurl = "http://127.0.0.1:%d" % vv_srv.server_address[1]
+        ok("add_voice: find_voicevox detects local VOICEVOX server", add_voice.find_voicevox(vurl) == vurl)
+        ok("add_voice: voicevox_speakers parses speaker styles", add_voice.voicevox_speakers(vurl) == [(2, "四国めたん（ノーマル）")])
+        ok("add_voice: voicevox_synth applies speedScale and returns WAV bytes", add_voice.voicevox_synth(vurl, "テスト", 2, 1.2) == b"RIFF1.2")
+    finally:
+        vv_srv.shutdown()
+        vv_srv.server_close()
+    r_vinfo_j = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(ea_deck), "--info", "--json"], capture_output=True, text=True)
+    vi_j = json.loads(r_vinfo_j.stdout) if r_vinfo_j.returncode == 0 else {}
+    ok("add_voice --info --json: outputs structured audio summary", r_vinfo_j.returncode == 0 and vi_j.get("has_audio") is True and vi_j.get("clips") == 2 and vi_j.get("duration_sec", 0) > 0, vi_j)
+    r_dry = subprocess.run([sys.executable, str(SKILL / "scripts" / "add_voice.py"), str(ea_deck), "--dry-run", "--json"], capture_output=True, text=True)
+    dry_j = json.loads(r_dry.stdout) if r_dry.returncode == 0 else {}
+    ok("add_voice --dry-run --json: lists sentences and cache status without an engine",
+       r_dry.returncode == 0 and dry_j.get("total") == 2 and dry_j.get("cached") == 2 and dry_j.get("new") == 0, dry_j)
+    with patch.object(add_voice.shutil, "which", return_value="/usr/bin/say"), \
+         patch.object(add_voice, "say_voices", return_value=[("Kyoko", "ja_JP"), ("Samantha", "en_US")]), \
+         patch.object(sys, "argv", ["add_voice.py", str(ea_deck), "--engine", "say", "--speaker", "NoSuchVoice"]):
+        ok("add_voice: --engine say rejects unknown --speaker early", add_voice.main() == 2)
 
     fails = [x for x in results if not x[1]]
     for name, passed, info in results:
