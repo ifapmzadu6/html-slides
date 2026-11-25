@@ -164,7 +164,7 @@ One emoji as the main visual in place of a figure. Combine it with `tc`.
 
 ## Figures and images
 
-Write `<img src="screen.png" alt="…">` using a path relative to the `.slides.html` file (or a data URI). `build.py` automatically embeds local PNG, JPEG, WebP, GIF, SVG and AVIF files as data URIs so the output stays a single self-contained HTML file (pass `--no-inline-images` to keep external links instead). Never use an external `http(s)://` URL. Always write `alt`.
+Write `<img src="screen.png" alt="…">` (or SVG `<image href="screen.png">`) using a path relative to the `.slides.html` file (or a data URI). `build.py` automatically embeds local PNG, JPEG, WebP, GIF, SVG and AVIF files as data URIs so the output stays a single self-contained HTML file (pass `--no-inline-images` to keep external links instead). Never use an external `http(s)://` URL. Always write `alt` on `<img>`.
 
 `grow` on a `figure` makes it fill the remaining height. Add `class="frame"` to give a screenshot a subtle border and shadow.
 

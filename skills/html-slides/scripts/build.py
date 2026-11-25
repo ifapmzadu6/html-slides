@@ -678,7 +678,8 @@ def parse_source(text):
         problems.append({"line": setting_lines.get("theme", 1), "slide": 0, "type": "unknown-theme", "level": "error", "msg": 'Theme "%s" does not exist.' % meta["theme"],
                          "hint": near(meta["theme"], THEMES) + "Available themes: " + ", ".join(THEMES) + "."})
     css, slides = SourceStyles(body).split()
-    if css and re.search(r"url\(\s*[\"']?((https?:)?//|file:)|@import\b", css, re.I):
+    css_clean = re.sub(r"/\*.*?\*/", "", css, flags=re.S) if css else ""
+    if css_clean and re.search(r"url\(\s*[\"']?((https?:)?//|file:)|@import\b", css_clean, re.I):
         style_pos = text.lower().find("<style")
         style_ln = text[:style_pos].count("\n") + 1 if style_pos >= 0 else 1
         problems.append({"line": style_ln, "slide": 0, "type": "external", "level": "error",
@@ -695,7 +696,8 @@ def parse_source(text):
 
 def lint(text, base_dir=None, inline_images=True):
     meta, css, slides, problems = parse_source(text)
-    custom = set(re.findall(r"\.([A-Za-z_][\w-]*)", css))
+    css_clean = re.sub(r"/\*.*?\*/", "", css, flags=re.S) if css else ""
+    custom = set(re.findall(r"\.([A-Za-z_][\w-]*)", css_clean))
     p = Lint(custom, dense=meta["density"] == "dense", base_dir=base_dir, inline_images=inline_images)
     p.feed(text)
     p.close()
